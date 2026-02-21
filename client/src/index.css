@@ -1,0 +1,727 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Ferrari Racing Theme - CSS Variables */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-tertiary: #1e1e1e;
+  --accent-primary: #ff2800;
+  --accent-secondary: #ffcc00;
+  --accent-glow: rgba(255, 40, 0, 0.4);
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0a0;
+  --status-running: #00ff88;
+  --status-idle: #ffaa00;
+  --status-error: #ff2800;
+  --border-subtle: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'Rajdhani', sans-serif;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar for racing aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}
+
+/* Selection color */
+::selection {
+  background: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* === Phase 2: Carbon Fiber & Animations === */
+
+/* Carbon fiber background pattern */
+.carbon-fiber {
+  background-color: #0a0a0a;
+  background-image:
+    linear-gradient(45deg, #111 25%, transparent 25%),
+    linear-gradient(-45deg, #111 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #111 75%),
+    linear-gradient(-45deg, transparent 75%, #111 75%);
+  background-size: 4px 4px;
+  background-position: 0 0, 0 2px, 2px -2px, -2px 0;
+}
+
+/* Subtle texture overlay for panels */
+.carbon-overlay {
+  position: relative;
+}
+.carbon-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* LED pulse animation for status indicators */
+@keyframes led-pulse {
+  0%, 100% { box-shadow: 0 0 4px currentColor, 0 0 8px currentColor; opacity: 1; }
+  50% { box-shadow: 0 0 8px currentColor, 0 0 16px currentColor; opacity: 0.8; }
+}
+
+.led-pulse {
+  animation: led-pulse 2s ease-in-out infinite;
+}
+
+/* Ferrari red glow on hover */
+@keyframes ferrari-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 40, 0, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(255, 40, 0, 0.5), 0 0 30px rgba(255, 40, 0, 0.2); }
+}
+
+.ferrari-hover-glow:hover {
+  animation: ferrari-glow 1.5s ease-in-out infinite;
+}
+
+/* Staggered card reveal animation */
+@keyframes card-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card-reveal {
+  animation: card-reveal 0.4s ease-out both;
+}
+
+.card-reveal:nth-child(1) { animation-delay: 0ms; }
+.card-reveal:nth-child(2) { animation-delay: 80ms; }
+.card-reveal:nth-child(3) { animation-delay: 160ms; }
+.card-reveal:nth-child(4) { animation-delay: 240ms; }
+.card-reveal:nth-child(5) { animation-delay: 320ms; }
+.card-reveal:nth-child(6) { animation-delay: 400ms; }
+
+/* Tab slide transition */
+@keyframes tab-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.tab-slide-in {
+  animation: tab-slide-in 0.3s ease-out;
+}
+
+/* Fuel gauge bar */
+.fuel-gauge {
+  background: linear-gradient(90deg, #ff2800 0%, #ffcc00 60%, #22c55e 100%);
+}
+
+/* Racing stripe accent */
+.racing-stripe {
+  background: linear-gradient(90deg, #ff2800, #ff2800 40%, #ffcc00 40%, #ffcc00 60%, #ff2800 60%);
+  height: 3px;
+}
+
+/* ============================================
+   PHASE 3 EXPERIENCE POLISH
+   ============================================ */
+
+/* ============================================
+   1. PARTICLE EFFECTS - Floating Dust (Race Track Night)
+   ============================================ */
+.particles-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.particle {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: rgba(255, 204, 0, 0.3);
+  border-radius: 50%;
+  animation: float-dust 15s infinite linear;
+}
+
+.particle:nth-child(1) { left: 10%; animation-delay: 0s; animation-duration: 18s; }
+.particle:nth-child(2) { left: 20%; animation-delay: 2s; animation-duration: 20s; }
+.particle:nth-child(3) { left: 30%; animation-delay: 4s; animation-duration: 16s; }
+.particle:nth-child(4) { left: 40%; animation-delay: 1s; animation-duration: 22s; }
+.particle:nth-child(5) { left: 50%; animation-delay: 3s; animation-duration: 19s; }
+.particle:nth-child(6) { left: 60%; animation-delay: 5s; animation-duration: 17s; }
+.particle:nth-child(7) { left: 70%; animation-delay: 0.5s; animation-duration: 21s; }
+.particle:nth-child(8) { left: 80%; animation-delay: 2.5s; animation-duration: 18s; }
+.particle:nth-child(9) { left: 90%; animation-delay: 4.5s; animation-duration: 23s; }
+.particle:nth-child(10) { left: 15%; animation-delay: 1.5s; animation-duration: 15s; }
+.particle:nth-child(11) { left: 35%; animation-delay: 3.5s; animation-duration: 24s; }
+.particle:nth-child(12) { left: 55%; animation-delay: 6s; animation-duration: 16s; }
+.particle:nth-child(13) { left: 75%; animation-delay: 7s; animation-duration: 20s; }
+.particle:nth-child(14) { left: 85%; animation-delay: 8s; animation-duration: 17s; }
+.particle:nth-child(15) { left: 25%; animation-delay: 9s; animation-duration: 22s; }
+
+@keyframes float-dust {
+  0% {
+    transform: translateY(100vh) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-100px) translateX(100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   2. CUSTOM CURSOR - Speed Line Effect
+   ============================================ */
+.speed-cursor {
+  position: relative;
+}
+
+.speed-cursor::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -20px;
+  width: 15px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-secondary), var(--accent-primary));
+  opacity: 0;
+  transform: translateY(-50%) scaleX(0);
+  transition: all 0.2s ease-out;
+  pointer-events: none;
+}
+
+.speed-cursor:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) scaleX(1);
+  animation: speed-line 0.5s infinite;
+}
+
+@keyframes speed-line {
+  0%, 100% {
+    left: -20px;
+    width: 15px;
+    opacity: 0;
+  }
+  50% {
+    left: -30px;
+    width: 25px;
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   3. ADVANCED MICRO-INTERACTIONS
+   ============================================ */
+
+/* Speed Lines on Hover */
+.speed-lines {
+  position: relative;
+  overflow: hidden;
+}
+
+.speed-lines::before,
+.speed-lines::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent-secondary), transparent);
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.speed-lines::before {
+  left: -60px;
+  transform: translateY(-50%);
+}
+
+.speed-lines::after {
+  right: -60px;
+  transform: translateY(-50%);
+}
+
+.speed-lines:hover::before {
+  left: 10px;
+  opacity: 0.8;
+  animation: speed-left 0.6s ease-in-out infinite;
+}
+
+.speed-lines:hover::after {
+  right: 10px;
+  opacity: 0.8;
+  animation: speed-right 0.6s ease-in-out infinite;
+}
+
+@keyframes speed-left {
+  0%, 100% { left: 10px; }
+  50% { left: -20px; }
+}
+
+@keyframes speed-right {
+  0%, 100% { right: 10px; }
+  50% { right: -20px; }
+}
+
+/* Green Light Sequence - Agent Start Animation */
+.green-light-sequence {
+  position: relative;
+}
+
+.green-light-sequence::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, var(--status-running) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: all 0.5s ease-out;
+}
+
+.green-light-sequence.active::before {
+  width: 300px;
+  height: 300px;
+  opacity: 0.3;
+  animation: green-light-pulse 1s ease-out;
+}
+
+@keyframes green-light-pulse {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 0.8;
+  }
+  100% {
+    width: 300px;
+    height: 300px;
+    opacity: 0;
+  }
+}
+
+/* Tachometer-style Loading Spinner */
+.tachometer-spinner {
+  position: relative;
+  width: 40px;
+  height: 40px;
+}
+
+.tachometer-spinner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 3px solid transparent;
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: tachometer-rotate 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+.tachometer-spinner::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent-secondary);
+  border-radius: 50%;
+  animation: tachometer-rotate 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite reverse;
+}
+
+@keyframes tachometer-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(720deg); }
+}
+
+/* Checkered Flag Pulse - Task Completion */
+.checkered-pulse {
+  position: relative;
+}
+
+.checkered-pulse.completed {
+  animation: checkered-flag 0.6s ease-out;
+}
+
+@keyframes checkered-flag {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 255, 136, 0);
+  }
+  25% {
+    box-shadow: 0 0 0 8px rgba(0, 255, 136, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 16px rgba(0, 255, 136, 0.15);
+  }
+  75% {
+    box-shadow: 0 0 0 8px rgba(0, 255, 136, 0.1);
+  }
+}
+
+/* ============================================
+   4. COMPONENT ANIMATIONS
+   ============================================ */
+
+/* Enhanced Button Hover States */
+.btn-ferrari {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-ferrari::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s ease;
+}
+
+.btn-ferrari:hover::before {
+  left: 100%;
+}
+
+.btn-ferrari:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    0 10px 20px -5px var(--accent-glow),
+    0 0 20px -5px var(--accent-glow);
+}
+
+.btn-ferrari:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Button variants */
+.btn-ferrari-primary {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #cc2000 100%);
+  border: 1px solid var(--accent-primary);
+}
+
+.btn-ferrari-secondary {
+  background: linear-gradient(135deg, var(--accent-secondary) 0%, #e6b800 100%);
+  border: 1px solid var(--accent-secondary);
+  color: #1a1a1a;
+}
+
+/* Card Entrance Animations */
+.card-entrance {
+  animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+@keyframes card-enter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Staggered entrance */
+.card-entrance:nth-child(1) { animation-delay: 0s; }
+.card-entrance:nth-child(2) { animation-delay: 0.1s; }
+.card-entrance:nth-child(3) { animation-delay: 0.2s; }
+.card-entrance:nth-child(4) { animation-delay: 0.3s; }
+.card-entrance:nth-child(5) { animation-delay: 0.4s; }
+.card-entrance:nth-child(6) { animation-delay: 0.5s; }
+
+/* Status Change Pulse Effects */
+.status-pulse {
+  position: relative;
+}
+
+.status-pulse::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.status-pulse.status-running::after {
+  background: var(--status-running);
+  animation: status-glow 1.5s ease-in-out infinite;
+}
+
+.status-pulse.status-error::after {
+  background: var(--status-error);
+  animation: status-glow 1s ease-in-out infinite;
+}
+
+.status-pulse.status-idle::after {
+  background: var(--status-idle);
+  animation: status-glow 2s ease-in-out infinite;
+}
+
+@keyframes status-glow {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.05);
+  }
+}
+
+/* ============================================
+   5. VISUAL POLISH
+   ============================================ */
+
+/* Gradient Glows on Active Elements */
+.gradient-glow {
+  position: relative;
+}
+
+.gradient-glow::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(
+    135deg,
+    var(--accent-primary),
+    var(--accent-secondary),
+    var(--accent-primary)
+  );
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: -1;
+  filter: blur(8px);
+}
+
+.gradient-glow.active::before,
+.gradient-glow:hover::before {
+  opacity: 0.5;
+}
+
+/* Subtle Vignette Effect */
+.vignette-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 0%,
+    transparent 60%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+}
+
+/* Enhanced Dark Theme Contrast */
+.ferrari-dark {
+  background-color: #0a0a0a;
+  color: #ffffff;
+}
+
+/* Interactive element focus states */
+.interactive-element {
+  transition: all 0.2s ease;
+}
+
+.interactive-element:hover {
+  background-color: rgba(255, 40, 0, 0.1);
+  border-color: var(--accent-primary);
+}
+
+.interactive-element:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Glow utilities */
+.glow-red {
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.glow-yellow {
+  box-shadow: 0 0 20px rgba(255, 204, 0, 0.4);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+}
+
+/* Text glow */
+.text-glow {
+  text-shadow: 0 0 10px currentColor;
+}
+
+/* Border glow */
+.border-glow {
+  position: relative;
+}
+
+.border-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.border-glow:hover::after {
+  opacity: 1;
+}
+
+/* Shimmer effect */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    left: 100%;
+  }
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+@media (max-width: 768px) {
+  .particle {
+    width: 1px;
+    height: 1px;
+  }
+
+  .tachometer-spinner {
+    width: 30px;
+    height: 30px;
+  }
+
+  .btn-ferrari:hover {
+    transform: translateY(-1px) scale(1.01);
+  }
+}
+
+/* ============================================
+   REDUCE MOTION PREFERENCE
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  .particle,
+  .speed-cursor::after,
+  .speed-lines::before,
+  .speed-lines::after,
+  .tachometer-spinner::before,
+  .tachometer-spinner::after,
+  .btn-ferrari::before,
+  .shimmer::after {
+    animation: none;
+    transition: none;
+  }
+}
