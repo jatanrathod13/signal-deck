@@ -23,6 +23,10 @@ import { initializePlans } from './services/planService';
 import { initializeConversationStore } from './services/conversationService';
 import { initializeApprovalStore } from './services/governanceService';
 import { startWorker, stopWorker } from '../worker/taskWorker';
+import { requestContextMiddleware } from './middleware/requestContextMiddleware';
+import { supabaseAuthMiddleware } from './middleware/authMiddleware';
+import { logger } from './lib/logger';
+import { getReadinessSnapshot } from './services/readinessService';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
@@ -32,10 +36,22 @@ const app: Express = express();
 // Middleware
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+app.use(requestContextMiddleware);
+app.use('/api', supabaseAuthMiddleware);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/ready', async (_req: Request, res: Response) => {
+  const snapshot = await getReadinessSnapshot();
+  const statusCode = snapshot.status === 'ok' ? 200 : 503;
+  return res.status(statusCode).json({
+    status: snapshot.status,
+    checks: snapshot.checks,
+    timestamp: snapshot.timestamp
+  });
 });
 
 // Agent routes
@@ -67,7 +83,11 @@ app.use('/api/system', systemRoutes);
 
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Server error:', err);
+  logger.error({
+    requestId: _req.requestId,
+    error: err.message,
+    stack: err.stack
+  }, 'server.error');
   res.status(500).json({
     success: false,
     error: err.message || 'Internal server error'
@@ -89,23 +109,23 @@ initializeSocket(io);
 
 // Socket.IO connection handler
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  logger.info({ socketId: socket.id }, 'socket.connected');
 
   // Join agent-specific room
   socket.on('join-agent', (agentId: string) => {
     socket.join(`agent:${agentId}`);
-    console.log(`Socket ${socket.id} joined agent:${agentId}`);
+    logger.info({ socketId: socket.id, agentId }, 'socket.join_agent');
   });
 
   // Leave agent room
   socket.on('leave-agent', (agentId: string) => {
     socket.leave(`agent:${agentId}`);
-    console.log(`Socket ${socket.id} left agent:${agentId}`);
+    logger.info({ socketId: socket.id, agentId }, 'socket.leave_agent');
   });
 
   // Handle disconnect
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    logger.info({ socketId: socket.id }, 'socket.disconnected');
   });
 });
 
@@ -119,7 +139,7 @@ export async function createServer(): Promise<http.Server> {
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      logger.info({ port: PORT }, 'server.started');
       startWorker();
       resolve(server);
     });
@@ -128,19 +148,19 @@ export async function createServer(): Promise<http.Server> {
 
 // Graceful shutdown handlers
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully');
+  logger.info('signal.sigterm_received');
   await stopWorker();
   server.close(() => {
-    console.log('Server closed');
+    logger.info('server.closed');
     process.exit(0);
   });
 });
 
 process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully');
+  logger.info('signal.sigint_received');
   await stopWorker();
   server.close(() => {
-    console.log('Server closed');
+    logger.info('server.closed');
     process.exit(0);
   });
 });

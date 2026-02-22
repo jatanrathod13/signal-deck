@@ -8,6 +8,12 @@ import { EventEmitter } from 'events';
 import { Agent, AgentStatus } from '../../types';
 import { emitAgentStatus } from './socketService';
 import { redis } from '../../config/redis';
+import {
+  deleteAgentFromSupabase,
+  isSupabasePersistenceEnabled,
+  loadAgentsFromSupabase,
+  saveAgentToSupabase
+} from './supabasePersistenceService';
 
 // Redis key prefix for agents
 const AGENT_KEY_PREFIX = 'agent:';
@@ -24,6 +30,16 @@ let redisAvailable = false;
 
 // Initialize Redis connection and load agents
 async function initializeRedis(): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      const persistedAgents = await loadAgentsFromSupabase();
+      agents = new Map(persistedAgents.map((agent) => [agent.id, agent]));
+      console.log(`Loaded ${agents.size} agents from Supabase`);
+    } catch (error) {
+      console.warn('Supabase agent persistence unavailable, falling back to Redis:', error);
+    }
+  }
+
   try {
     // Test Redis connection
     await redis.ping();
@@ -31,7 +47,9 @@ async function initializeRedis(): Promise<void> {
     console.log('Redis connected for agent persistence');
 
     // Load existing agents from Redis on startup
-    await loadAgentsFromRedis();
+    if (!isSupabasePersistenceEnabled() || agents.size === 0) {
+      await loadAgentsFromRedis();
+    }
   } catch (error) {
     console.warn('Redis unavailable, using in-memory storage only:', error);
     redisAvailable = false;
@@ -116,6 +134,32 @@ async function deleteAgentFromRedis(agentId: string): Promise<void> {
   }
 }
 
+async function persistAgent(agent: Agent): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      await saveAgentToSupabase(agent);
+      return;
+    } catch (error) {
+      console.error('Failed to save agent to Supabase, falling back to Redis:', error);
+    }
+  }
+
+  await saveAgentToRedis(agent);
+}
+
+async function removePersistedAgent(agentId: string): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      await deleteAgentFromSupabase(agentId);
+      return;
+    } catch (error) {
+      console.error('Failed to delete agent from Supabase, falling back to Redis:', error);
+    }
+  }
+
+  await deleteAgentFromRedis(agentId);
+}
+
 // Create EventEmitter for lifecycle events
 class AgentService extends EventEmitter {
   // Uses module-level agents Map for backward compatibility
@@ -144,8 +188,8 @@ class AgentService extends EventEmitter {
     agents.set(id, agent);
 
     // Persist to Redis asynchronously
-    saveAgentToRedis(agent).catch(err => {
-      console.error('Failed to persist agent to Redis:', err);
+    persistAgent(agent).catch(err => {
+      console.error('Failed to persist agent:', err);
     });
 
     this.emit('agent:registered', { agentId: id, agent });
@@ -169,8 +213,8 @@ class AgentService extends EventEmitter {
     agent.updatedAt = new Date();
 
     // Persist to Redis asynchronously
-    updateAgentInRedis(agent).catch(err => {
-      console.error('Failed to update agent in Redis:', err);
+    persistAgent(agent).catch(err => {
+      console.error('Failed to update agent persistence:', err);
     });
 
     this.emit('agent:started', { agentId: id, agent });
@@ -194,8 +238,8 @@ class AgentService extends EventEmitter {
     agent.updatedAt = new Date();
 
     // Persist to Redis asynchronously
-    updateAgentInRedis(agent).catch(err => {
-      console.error('Failed to update agent in Redis:', err);
+    persistAgent(agent).catch(err => {
+      console.error('Failed to update agent persistence:', err);
     });
 
     this.emit('agent:stopped', { agentId: id, agent });
@@ -253,8 +297,8 @@ class AgentService extends EventEmitter {
     agents.delete(id);
 
     // Remove from Redis asynchronously
-    deleteAgentFromRedis(id).catch(err => {
-      console.error('Failed to delete agent from Redis:', err);
+    removePersistedAgent(id).catch(err => {
+      console.error('Failed to delete agent persistence:', err);
     });
 
     this.emit('agent:deleted', { agentId: id });

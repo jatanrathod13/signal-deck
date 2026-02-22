@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { redis } from '../../config/redis';
+import { getReadinessSnapshot } from '../services/readinessService';
 
 const router = Router();
 
@@ -53,6 +54,16 @@ router.get('/healthz', async (_req: Request, res: Response) => {
       checks,
       timestamp: new Date().toISOString()
     }
+  });
+});
+
+router.get('/ready', async (_req: Request, res: Response) => {
+  const snapshot = await getReadinessSnapshot();
+  const httpStatus = snapshot.status === 'ok' ? 200 : 503;
+
+  return res.status(httpStatus).json({
+    success: snapshot.status === 'ok',
+    data: snapshot
   });
 });
 

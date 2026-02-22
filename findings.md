@@ -1,0 +1,131 @@
+# Findings & Decisions
+
+## Requirements
+- Review `ROADMAP.md` and produce a concrete implementation plan.
+- Use Supabase MCP docs and web search to validate current best practices.
+- Use Vercel AI SDK guidance to ensure AI/runtime parts are technically correct.
+- Ground the plan in this repo's real current state.
+
+## Research Findings
+- Current server has no Supabase integration (`@supabase/*` not present) and relies on Redis + in-memory maps for persistence.
+- Current server already has:
+  - Task queue via BullMQ/Redis.
+  - Health endpoints (`/health`, `/api/system/healthz`) and metrics endpoint (`/api/metrics`).
+  - Conversation/run timeline, deep research profile flags, governance/evaluator services.
+- Current client already has a dashboard and workspace shell with real-time event timeline.
+- No Docker artifacts exist (`Dockerfile`/`docker-compose` missing).
+
+## Supabase MCP + Docs Findings
+- API keys:
+  - Supabase recommends publishable (`sb_publishable_*`) + secret (`sb_secret_*`) keys; legacy `anon`/`service_role` are transitional.
+  - Secret/service-role bypasses RLS and must stay server-only.
+- Auth and RBAC:
+  - Custom claims + auth hooks are the recommended RBAC pattern for app roles.
+- Scheduling:
+  - Supabase Cron uses `pg_cron`; docs recommend limiting concurrent jobs and keeping jobs short.
+- Realtime:
+  - Broadcast is recommended for scalability/security; Postgres Changes is simpler but less scalable.
+- Auditability:
+  - `pgaudit` is available for DB-level audit; Auth audit logs are available via Auth logging features.
+- Organizations:
+  - Supabase Organizations are platform grouping/billing/team units, not in-app tenant isolation.
+
+## Vercel AI SDK Findings (Local ai@6 docs + Web)
+- MCP:
+  - `@ai-sdk/mcp` with HTTP transport is the recommended production approach.
+  - `stdio` transport is local-only.
+- Chat transport:
+  - `useChat` request options should be configured through transport or request-level options, not legacy top-level hook options.
+- Stream resume:
+  - Resume support requires persistence + Redis stream handling and dedicated POST/GET endpoints.
+  - Abort and resume are currently incompatible; UX must choose one mode.
+
+## Technical Decisions
+| Decision | Rationale |
+|----------|-----------|
+| Introduce a data-access layer (`repositories/`) and migrate service by service | Enables gradual migration from Redis/in-memory to Postgres without full rewrite |
+| Add workspace-aware schema (`workspace_id`) on core entities | Enables RLS-backed multi-tenancy and future quotas |
+| Keep Redis for queue/cache while shifting canonical state to Postgres | Preserves runtime behavior and lowers migration risk |
+| Add auth middleware that resolves Supabase user + workspace membership | Required to enforce per-workspace access in routes/services |
+| Convert roadmap "Supabase Organizations" to "workspaces in app DB" | Aligns roadmap with actual Supabase capability boundaries |
+| Migrate MCP client internals to `@ai-sdk/mcp` behind feature flag | Safe incremental rollout and compatibility fallback |
+
+## Issues Encountered
+| Issue | Resolution |
+|-------|------------|
+| Very large MCP doc payloads from search tool | Switched to targeted topic queries and direct URL checks |
+
+## Resources
+- Roadmap: `/Users/jatanrathod/Applications/context-engineering-kit-test/ROADMAP.md`
+- Existing master plan (different scope): `/Users/jatanrathod/Applications/context-engineering-kit-test/IMPLEMENTATION_MASTER_PLAN.md`
+- Key server entrypoint: `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/index.ts`
+- Task persistence (current): `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/taskPersistenceService.ts`
+- Conversation routes: `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/routes/conversationRoutes.ts`
+- Execution service: `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/executionService.ts`
+- Supabase API keys: https://supabase.com/docs/guides/api/api-keys
+- Supabase billing/org model: https://supabase.com/docs/guides/platform/billing-on-supabase
+- Supabase cron: https://supabase.com/docs/guides/cron
+- Supabase RLS/RBAC custom claims: https://supabase.com/docs/guides/database/postgres/custom-claims-and-role-based-access-control-rbac
+- Supabase auth audit logs: https://supabase.com/docs/guides/auth/audit-logs
+- Supabase realtime DB changes: https://supabase.com/docs/guides/realtime/subscribing-to-database-changes
+- Vercel AI SDK MCP tools: https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools
+- Vercel AI SDK transport: https://ai-sdk.dev/docs/ai-sdk-ui/transport
+- Vercel AI SDK resume streams: https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-resume-streams
+
+## Visual/Browser Findings
+- Supabase docs explicitly state organization-level billing model and project grouping.
+- Supabase docs state Broadcast as the recommended scalable realtime pattern.
+- AI SDK docs state stream resume requires storage + Redis and separate resume endpoint.
+
+## M1 Execution Update (2026-02-22)
+- Added first Supabase migration scaffold at `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/supabase/migrations/202602230001_initial_m1_schema.sql`.
+- Migration includes app-level tenancy schema + RLS:
+  - Tables: `workspaces`, `workspace_members`, `agents`, `tasks`, `plans`, `plan_steps`, `runs`, `run_events`, `webhooks`, `schedules`, `audit_events`.
+  - Enums for statuses and execution modes aligned with current server type unions.
+  - Indexes for tenancy, status filtering, run event ordering, idempotency, webhook/schedule processing.
+  - RLS helper functions (`is_workspace_member`, `has_workspace_role`) and table policies.
+- Added repository contract scaffold in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/repositories/`:
+  - `repositoryModels.ts`: persisted models, list filters, create-input contracts.
+  - `repositoryInterfaces.ts`: workspace/member/agent/task/plan/run/webhook/schedule/audit repository interfaces.
+  - `index.ts`: central exports.
+- Build verification passed after scaffolding: `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build`.
+
+## Phase 3 Completion Update (2026-02-22)
+- Persistence layer:
+  - Added Supabase repository implementations:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/repositories/supabase/supabaseWorkspaceRepository.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/repositories/supabase/supabaseAgentRepository.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/repositories/supabase/supabaseTaskRepository.ts`
+  - Added feature-flagged persistence bridge:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/supabasePersistenceService.ts`
+  - Wired Supabase persistence into:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/agentService.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/taskPersistenceService.ts`
+  - Corrected migration ID strategy to align with existing string IDs (`agent-*`, `task-*`, `run-*`) while retaining workspace UUID tenancy keys.
+- AuthN/AuthZ:
+  - Added middleware at `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/middleware/authMiddleware.ts`.
+  - Enforces Supabase JWT verification and workspace membership checks when `FEATURE_SUPABASE_AUTH=true`.
+  - Uses `x-workspace-id` tenant scoping and attaches `req.auth`.
+- Observability hardening:
+  - Added structured logger: `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/lib/logger.ts`.
+  - Added request correlation + request metrics middleware:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/middleware/requestContextMiddleware.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/observabilityService.ts`
+  - Added readiness checks:
+    - `/ready` (root)
+    - `/api/system/ready`
+    - checks Redis + Supabase DB + BullMQ queue via `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/readinessService.ts`.
+  - Added Prometheus endpoint: `/api/metrics/prometheus`.
+- Validation and runbooks:
+  - Added tests:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/authMiddleware.test.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/readinessService.test.ts`
+  - Added docs:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/ENVIRONMENT_CONTRACT.md`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/PHASE3_ROLLBACK_RUNBOOK.md`
+  - Added migration tooling helper:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/scripts/listMigrations.js`
+    - `npm run migrations:list`
+- Final verification:
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (17 suites, 115 tests).
