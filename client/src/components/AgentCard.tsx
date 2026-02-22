@@ -113,7 +113,7 @@ export function AgentCard({ agent, className }: AgentCardProps) {
   const isLoading = isStarting || isStopping || isRestarting || isDeleting;
 
   return (
-    <article className={cn('glass-panel p-4 subtle-ring transition-all duration-200 hover:-translate-y-0.5', className)}>
+    <article className={cn('glass-panel surface-lift p-4 subtle-ring transition-all duration-200', className)}>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

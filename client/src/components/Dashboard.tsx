@@ -105,7 +105,7 @@ export function Dashboard({ className }: DashboardProps) {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200',
+                    'surface-lift inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200',
                     isActive ? 'btn-primary text-cyan-50' : 'btn-ghost'
                   )}
                 >
@@ -129,7 +129,7 @@ export function Dashboard({ className }: DashboardProps) {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'inline-flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium',
+                    'surface-lift inline-flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium',
                     isActive ? 'btn-primary' : 'btn-ghost'
                   )}
                 >

@@ -352,7 +352,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-cyan-200">
                     Processing ({groupedTasks.processing.length})
                   </h3>
-                  <div className="space-y-2">
+                  <div className="stagger-list space-y-2">
                     {groupedTasks.processing.map((task, index) => (
                       <TaskItem key={task.id} task={task} position={index + 1} isPolePosition={index === 0} />
                     ))}
@@ -365,7 +365,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-200">
                     Pending ({groupedTasks.pending.length})
                   </h3>
-                  <div className="space-y-2">
+                  <div className="stagger-list space-y-2">
                     {groupedTasks.pending.map((task, index) => (
                       <TaskItem key={task.id} task={task} position={index + 1} />
                     ))}
@@ -378,7 +378,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-orange-200">
                     Blocked ({groupedTasks.blocked.length})
                   </h3>
-                  <div className="space-y-2">
+                  <div className="stagger-list space-y-2">
                     {groupedTasks.blocked.map((task) => (
                       <TaskItem key={task.id} task={task} />
                     ))}
@@ -391,7 +391,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-200">
                     Completed ({groupedTasks.completed.length})
                   </h3>
-                  <div className="space-y-2">
+                  <div className="stagger-list space-y-2">
                     {groupedTasks.completed.map((task) => (
                       <TaskItem key={task.id} task={task} />
                     ))}
@@ -404,7 +404,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-rose-200">
                     Failed ({groupedTasks.failed.length})
                   </h3>
-                  <div className="space-y-2">
+                  <div className="stagger-list space-y-2">
                     {groupedTasks.failed.map((task) => (
                       <TaskItem key={task.id} task={task} />
                     ))}
@@ -417,7 +417,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                     Cancelled ({groupedTasks.cancelled.length})
                   </h3>
-                  <div className="space-y-2">
+                  <div className="stagger-list space-y-2">
                     {groupedTasks.cancelled.map((task) => (
                       <TaskItem key={task.id} task={task} />
                     ))}
@@ -426,7 +426,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
               )}
             </>
           ) : (
-            <div className="space-y-2">
+            <div className="stagger-list space-y-2">
               {tasksList.map((task, index) => (
                 <TaskItem key={task.id} task={task} position={index + 1} />
               ))}
