@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { createAndStartPlan, getPlanById } from '../services/orchestratorService';
 import { listPlans, updateStepStatus } from '../services/planService';
+import { OrchestrationExecutionStrategy, TaskExecutionMode } from '../../types';
 
 const router = Router();
 
@@ -15,6 +16,9 @@ interface CreatePlanBody {
   stepPrompts?: string[];
   autoGenerate?: boolean;
   maxSteps?: number;
+  teamAgentIds?: string[];
+  executionStrategy?: OrchestrationExecutionStrategy;
+  executionMode?: TaskExecutionMode;
   conversationId?: string;
   runId?: string;
   metadata?: Record<string, unknown>;
@@ -22,7 +26,19 @@ interface CreatePlanBody {
 
 router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => {
   try {
-    const { objective, defaultAgentId, stepPrompts, autoGenerate = false, maxSteps, conversationId, runId, metadata } = req.body;
+    const {
+      objective,
+      defaultAgentId,
+      stepPrompts,
+      autoGenerate = false,
+      maxSteps,
+      teamAgentIds,
+      executionStrategy,
+      executionMode,
+      conversationId,
+      runId,
+      metadata
+    } = req.body;
 
     if (!objective || !defaultAgentId) {
       return res.status(400).json({
@@ -44,6 +60,9 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
       defaultAgentId,
       stepPrompts: hasManualSteps ? stepPrompts : undefined,
       maxSteps,
+      teamAgentIds,
+      executionStrategy,
+      executionMode,
       conversationId,
       runId,
       metadata

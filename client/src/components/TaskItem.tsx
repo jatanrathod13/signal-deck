@@ -70,7 +70,20 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
   const [showCompletionAnimation, setShowCompletionAnimation] = useState(false);
   const [elapsed, setElapsed] = useState('00:00.0');
   const storeTask = useTaskStore((state) => state.getTask(task.id));
-  const currentTask = storeTask || task;
+  const storeTaskIsNewer = storeTask
+    ? new Date(storeTask.updatedAt).getTime() >= new Date(task.updatedAt).getTime()
+    : false;
+  const currentTask = storeTaskIsNewer
+    ? {
+      ...task,
+      ...storeTask,
+    }
+    : {
+      ...task,
+      liveOutput: storeTask?.liveOutput ?? task.liveOutput,
+      liveErrorOutput: storeTask?.liveErrorOutput ?? task.liveErrorOutput,
+      lastLogAt: storeTask?.lastLogAt ?? task.lastLogAt,
+    };
 
   useEffect(() => {
     if (
@@ -195,6 +208,10 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
     };
   };
 
+  const executionLabel = currentTask.executionMode === 'claude_cli' ? 'claude-cli' : 'tool-loop';
+  const liveOutput = currentTask.liveOutput || '';
+  const liveError = currentTask.liveErrorOutput || '';
+
   const formatDate = (date: Date | string): string => {
     const d = new Date(date);
     return d.toLocaleString();
@@ -228,6 +245,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
             <span className="font-mono">id: {currentTask.id.slice(0, 8)}...</span>
             <span className="font-mono">priority: {currentTask.priority}</span>
             {currentTask.agentId && <span className="font-mono">agent: {currentTask.agentId.slice(0, 8)}...</span>}
+            <span className="font-mono">mode: {executionLabel}</span>
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-2 py-0.5 font-mono text-cyan-200">
               <Timer className="h-3 w-3" />
               {elapsed}
@@ -322,9 +340,43 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
       {isExpanded && (
         <div className="tab-in mt-3 space-y-3 border-t border-white/10 pt-3">
           <div>
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Execution Context</h4>
+            <div className="rounded-lg border border-white/10 bg-slate-900/40 p-2 text-xs text-slate-300">
+              <p>plan: {currentTask.planId ?? 'n/a'}</p>
+              <p>step: {currentTask.stepId ?? 'n/a'}</p>
+              <p>parent: {currentTask.parentTaskId ?? 'n/a'}</p>
+              <p>run: {currentTask.runId ?? 'n/a'}</p>
+              <p>mode: {executionLabel}</p>
+            </div>
+          </div>
+
+          <div>
             <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Task Data</h4>
             <pre className="code-block max-h-64 overflow-auto p-2 text-xs">{String(JSON.stringify(currentTask.data, null, 2))}</pre>
           </div>
+
+          {(status === 'processing' || liveOutput || liveError) && (
+            <div>
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-cyan-100">
+                Live Execution Logs
+                {status === 'processing' && ' (active)'}
+              </h4>
+              <pre ref={outputRef} className="code-block max-h-64 overflow-auto p-2 text-xs">
+                {liveOutput || (status === 'processing' ? 'Waiting for command output...' : '')}
+                {status === 'processing' && <span className="animate-pulse">▊</span>}
+              </pre>
+              {liveError && (
+                <pre className="mt-2 code-block max-h-48 overflow-auto border border-rose-300/30 bg-rose-300/10 p-2 text-xs text-rose-100">
+                  {liveError}
+                </pre>
+              )}
+              {currentTask.lastLogAt && (
+                <div className="mt-1 text-xs text-slate-400">
+                  last log: {formatDate(currentTask.lastLogAt)}
+                </div>
+              )}
+            </div>
+          )}
 
           {currentTask.result !== undefined && (
             <div>
@@ -343,6 +395,21 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
                 <pre className="code-block max-h-64 overflow-auto p-2 text-xs text-emerald-100">
                   {String(JSON.stringify(currentTask.result, null, 2))}
                 </pre>
+              )}
+
+              {typeof currentTask.result === 'object' && currentTask.result !== null && (
+                <div className="mt-2">
+                  <h5 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Execution Metadata</h5>
+                  <pre className="code-block max-h-48 overflow-auto p-2 text-xs text-slate-200">
+                    {String(
+                      JSON.stringify(
+                        (currentTask.result as { metadata?: unknown }).metadata ?? {},
+                        null,
+                        2
+                      )
+                    )}
+                  </pre>
+                </div>
               )}
             </div>
           )}
@@ -375,7 +442,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
             </div>
           )}
 
-          {currentTask.error && (
+          {currentTask.error && (currentTask.status === 'failed' || currentTask.status === 'cancelled') && (
             <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 p-2 text-xs text-rose-100">
               <div className="inline-flex items-center gap-1 font-semibold">
                 <AlertCircle className="h-3 w-3" />

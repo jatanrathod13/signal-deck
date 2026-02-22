@@ -13,7 +13,7 @@ import {
   getChildTasks,
   getTasksByPlan
 } from '../services/taskQueueService';
-import { Task, TaskStatus } from '../../types';
+import { Task, TaskExecutionMode, TaskStatus } from '../../types';
 
 const router = Router();
 
@@ -21,6 +21,7 @@ interface CreateTaskBody {
   agentId: string;
   type: string;
   data?: Record<string, unknown>;
+  executionMode?: TaskExecutionMode;
   priority?: number;
   idempotencyKey?: string;
   parentTaskId?: string;
@@ -43,6 +44,7 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
       agentId,
       type,
       data = {},
+      executionMode,
       priority = 1,
       idempotencyKey,
       parentTaskId,
@@ -67,6 +69,7 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
       agentId,
       type,
       data,
+      executionMode,
       status: 'pending',
       priority,
       createdAt: now,

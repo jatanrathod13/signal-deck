@@ -82,10 +82,40 @@ describe('OrchestratorService', () => {
     expect(submitTaskMock).toHaveBeenCalledTimes(1);
     expect(updateStepStatusMock).toHaveBeenCalledWith(planId, stepId, 'running', { taskId: 'task-1' });
 
-    expect(summary).toEqual({
+    expect(summary).toEqual(expect.objectContaining({
       planId,
       totalSteps: 1,
-      readySteps: 1
+      readySteps: 1,
+      executionStrategy: 'sequential',
+      teamAgentIds: ['agent-1']
+    }));
+  });
+
+  it('creates parallel team plans with round-robin agent assignment', async () => {
+    createPlanMock.mockResolvedValue({
+      id: 'plan-team-1',
+      steps: [{ id: 'step-a' }, { id: 'step-b' }, { id: 'step-c' }]
     });
+
+    getReadyStepsMock.mockReturnValue([]);
+
+    await createAndStartPlan({
+      objective: 'Ship feature in parallel',
+      defaultAgentId: 'agent-1',
+      teamAgentIds: ['agent-1', 'agent-2'],
+      executionStrategy: 'parallel',
+      stepPrompts: ['Research', 'Implement', 'Validate']
+    });
+
+    const firstCreatePlanArg = createPlanMock.mock.calls[0][0] as {
+      steps: Array<{ agentId: string; dependsOnStepIds?: string[] }>;
+      metadata: { executionStrategy: string; teamAgentIds: string[] };
+    };
+
+    expect(firstCreatePlanArg.metadata.executionStrategy).toBe('parallel');
+    expect(firstCreatePlanArg.metadata.teamAgentIds).toEqual(['agent-1', 'agent-2']);
+    expect(firstCreatePlanArg.steps.map((step) => step.agentId)).toEqual(['agent-1', 'agent-2', 'agent-1']);
+    expect(firstCreatePlanArg.steps.every((step) => Array.isArray(step.dependsOnStepIds) && step.dependsOnStepIds.length === 0))
+      .toBe(true);
   });
 });

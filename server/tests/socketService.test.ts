@@ -5,6 +5,7 @@
 import { Server } from 'socket.io';
 import {
   emitAgentStatus,
+  emitTaskLog,
   emitTaskStatus,
   emitError,
   emitTaskCompleted,
@@ -109,12 +110,15 @@ describe('SocketService', () => {
 
       emitTaskStatus(task);
 
-      expect(mockIO.emit).toHaveBeenCalledWith('task-status', {
+      expect(mockIO.emit).toHaveBeenCalledWith('task-status', expect.objectContaining({
         taskId: 'task-1',
         status: 'processing',
         agentId: 'agent-1',
+        type: 'process',
+        priority: 1,
+        executionMode: undefined,
         timestamp: expect.any(Date)
-      });
+      }));
     });
 
     it('should emit event for different task statuses', () => {
@@ -132,10 +136,27 @@ describe('SocketService', () => {
 
       emitTaskStatus(task);
 
-      expect(mockIO.emit).toHaveBeenCalledWith('task-status', {
+      expect(mockIO.emit).toHaveBeenCalledWith('task-status', expect.objectContaining({
         taskId: 'task-2',
         status: 'completed',
         agentId: 'agent-1',
+        type: 'process',
+        priority: 2,
+        executionMode: undefined,
+        timestamp: expect.any(Date)
+      }));
+    });
+  });
+
+  describe('emitTaskLog', () => {
+    it('should emit task-log event with stream chunk', () => {
+      emitTaskLog('task-1', 'agent-1', 'stdout', 'hello');
+
+      expect(mockIO.emit).toHaveBeenCalledWith('task-log', {
+        taskId: 'task-1',
+        agentId: 'agent-1',
+        stream: 'stdout',
+        chunk: 'hello',
         timestamp: expect.any(Date)
       });
     });

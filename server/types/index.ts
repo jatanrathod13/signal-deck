@@ -18,12 +18,24 @@ export interface McpServerConfig {
 // Agent configuration
 export interface AgentConfig {
   mcpServers?: McpServerConfig[];
+  executionMode?: TaskExecutionMode;
+  claude?: {
+    command?: string;
+    baseArgs?: string[];
+    promptFlag?: string;
+    appendPromptAsArg?: boolean;
+    timeoutMs?: number;
+    workingDirectory?: string;
+    allowedCommands?: string[];
+  };
   [key: string]: unknown;
 }
 
 // Task status types
 export type TaskStatus = 'pending' | 'blocked' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type TaskErrorType = 'tool_error' | 'model_error' | 'timeout' | 'validation_error' | 'unknown_error';
+export type TaskExecutionMode = 'tool_loop' | 'claude_cli';
+export type OrchestrationExecutionStrategy = 'sequential' | 'parallel';
 export type PlanStatus = 'draft' | 'active' | 'completed' | 'failed' | 'cancelled';
 export type PlanStepStatus = 'pending' | 'blocked' | 'running' | 'completed' | 'failed' | 'skipped';
 export type ConversationStatus = 'active' | 'archived';
@@ -59,6 +71,7 @@ export interface Task {
   agentId: string;
   type: string;
   data: Record<string, unknown>;
+  executionMode?: TaskExecutionMode;
   status: TaskStatus;
   priority: number;
   createdAt: Date;
@@ -159,6 +172,8 @@ export interface OrchestrationSummary {
   rootTaskId?: string;
   totalSteps: number;
   readySteps: number;
+  executionStrategy?: OrchestrationExecutionStrategy;
+  teamAgentIds?: string[];
 }
 
 // Shared memory value interface
@@ -182,16 +197,30 @@ export interface TaskStatusEvent {
   taskId: string;
   status: TaskStatus;
   agentId?: string;
+  type?: string;
+  priority?: number;
+  executionMode?: TaskExecutionMode;
+  parentTaskId?: string;
   planId?: string;
   stepId?: string;
   runId?: string;
   conversationId?: string;
+  error?: string;
+  errorType?: TaskErrorType;
   timestamp: Date;
 }
 
 export interface TaskCompletedEvent {
   taskId: string;
   result: unknown;
+  timestamp: Date;
+}
+
+export interface TaskLogEvent {
+  taskId: string;
+  agentId: string;
+  stream: 'stdout' | 'stderr' | 'system';
+  chunk: string;
   timestamp: Date;
 }
 
@@ -207,6 +236,7 @@ export interface SocketEvents {
   'agent-status': AgentStatusEvent;
   'task-status': TaskStatusEvent;
   'task-completed': TaskCompletedEvent;
+  'task-log': TaskLogEvent;
   'plan-created': { planId: string; timestamp: Date };
   'plan-updated': { planId: string; status: PlanStatus; timestamp: Date };
   'plan-step-status': { planId: string; stepId: string; status: PlanStepStatus; timestamp: Date };

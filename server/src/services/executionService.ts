@@ -7,7 +7,7 @@ import { ToolLoopAgent, hasToolCall, tool, zodSchema } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { getAgent } from './agentService';
-import { Task, ToolPolicy } from '../../types';
+import { Task, TaskExecutionMode, ToolPolicy } from '../../types';
 import {
   getTieredValue,
   getValue,
@@ -19,6 +19,7 @@ import { createAgentTrace, formatTraceMetadata, isTracingEnabled } from './traci
 import { applyToolPolicies, clearTaskToolBudget } from './toolPolicyService';
 import { appendRunEvent } from './conversationService';
 import { createAndStartPlan } from './orchestratorService';
+import { executeClaudeCliTask } from './claudeCliService';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -418,6 +419,22 @@ function allowMockFallback(): boolean {
   return process.env.MOCK_AGENT_FALLBACK !== 'false';
 }
 
+function normalizeExecutionMode(value: unknown): TaskExecutionMode | undefined {
+  if (value === 'claude_cli' || value === 'tool_loop') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function resolveTaskExecutionMode(task: Task, agentConfig: Record<string, unknown>): TaskExecutionMode {
+  const taskDataMode = normalizeExecutionMode((task.data as { executionMode?: unknown }).executionMode);
+  const taskMode = normalizeExecutionMode(task.executionMode);
+  const agentMode = normalizeExecutionMode(agentConfig.executionMode);
+
+  return taskMode ?? taskDataMode ?? agentMode ?? 'tool_loop';
+}
+
 async function executeMockTask(task: Task): Promise<{
   message: string;
   finishReason: string;
@@ -500,6 +517,12 @@ export async function executeAgentTask(task: Task): Promise<any> {
     throw new Error(`Agent ${task.agentId} not found`);
   }
 
+  const agentConfig = agent.config as Record<string, unknown>;
+  const executionMode = resolveTaskExecutionMode(task, agentConfig);
+  if (executionMode === 'claude_cli') {
+    return executeClaudeCliTask(task, agentConfig);
+  }
+
   const systemPrompt = typeof agent.config.systemPrompt === 'string'
     ? agent.config.systemPrompt
     : "You are a helpful and expert AI assistant. Please complete the user's task to the best of your ability.";
@@ -530,7 +553,7 @@ export async function executeAgentTask(task: Task): Promise<any> {
     );
   }
 
-  const combinedTools = await buildTools(task, agent.config as Record<string, unknown>, traceContext);
+  const combinedTools = await buildTools(task, agentConfig, traceContext);
 
   const toolAgent = new ToolLoopAgent({
     model: openai(modelName),
@@ -592,6 +615,25 @@ export async function streamAgentTask(task: Task): Promise<any> {
     throw new Error(`Agent ${task.agentId} not found`);
   }
 
+  const agentConfig = agent.config as Record<string, unknown>;
+  const executionMode = resolveTaskExecutionMode(task, agentConfig);
+  if (executionMode === 'claude_cli') {
+    const result = await executeClaudeCliTask(task, agentConfig);
+    return {
+      text: result.stdout || result.message,
+      finishReason: result.finishReason,
+      steps: [
+        {
+          result: {
+            text: result.stdout || result.message
+          }
+        }
+      ],
+      toolCalls: [],
+      metadata: result.metadata
+    };
+  }
+
   const systemPrompt = typeof agent.config.systemPrompt === 'string'
     ? agent.config.systemPrompt
     : "You are a helpful and expert AI assistant. Please complete the user's task to the best of your ability.";
@@ -617,7 +659,7 @@ export async function streamAgentTask(task: Task): Promise<any> {
     };
   }
 
-  const combinedTools = await buildTools(task, agent.config as Record<string, unknown>, null);
+  const combinedTools = await buildTools(task, agentConfig, null);
 
   const toolAgent = new ToolLoopAgent({
     model: openai(modelName),

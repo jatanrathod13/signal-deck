@@ -7,11 +7,13 @@ import type {
   Agent,
   Conversation,
   ConversationMessage,
+  OrchestrationExecutionStrategy,
   Plan,
   Run,
   RunEvent,
   SharedMemoryValue,
-  Task
+  Task,
+  TaskExecutionMode
 } from '../types';
 
 // Base URL from environment or fallback to localhost
@@ -139,6 +141,7 @@ export interface SubmitTaskData {
   agentId: string;
   type: string;
   data: Record<string, unknown>;
+  executionMode?: TaskExecutionMode;
   priority?: number;
   idempotencyKey?: string;
   parentTaskId?: string;
@@ -219,7 +222,12 @@ export async function retryTask(id: string): Promise<Task> {
 export interface CreatePlanData {
   objective: string;
   defaultAgentId: string;
-  stepPrompts: string[];
+  stepPrompts?: string[];
+  autoGenerate?: boolean;
+  maxSteps?: number;
+  teamAgentIds?: string[];
+  executionStrategy?: OrchestrationExecutionStrategy;
+  executionMode?: TaskExecutionMode;
   metadata?: Record<string, unknown>;
 }
 

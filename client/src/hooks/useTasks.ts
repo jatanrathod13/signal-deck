@@ -38,6 +38,8 @@ export function useTasks(status?: string): UseQueryResult<Task[]> {
     queryFn: () => getTasks(status),
     staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: true,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 }
 
