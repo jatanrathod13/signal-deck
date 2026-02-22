@@ -24,5 +24,4 @@ output/
 tmp-agents.png
 
 # Local agent/spec artifacts
-.claude/skills/
 .specs/tasks/done/*.implementation.md
