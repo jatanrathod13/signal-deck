@@ -80,7 +80,7 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
         const entry = entries.find((e) => e.key === key);
         setSelectedValue(entry?.value || '');
       }
-    } catch (err) {
+    } catch (_err) {
       // Fallback to local value if API fails
       const entry = entries.find((e) => e.key === key);
       setSelectedValue(entry?.value || '');

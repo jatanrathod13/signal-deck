@@ -73,7 +73,8 @@ export function AgentCard({ agent, className }: AgentCardProps) {
       console.error('Failed to start agent:', error);
     } finally {
       setIsStarting(false);
-      setTimeout(() => setShowGreenLight(false), 1000);
+      // More dramatic green light fade
+      setTimeout(() => setShowGreenLight(false), 1500);
     }
   };
 
@@ -122,33 +123,43 @@ export function AgentCard({ agent, className }: AgentCardProps) {
   return (
     <div
       className={cn(
-        'bg-[#1e1e1e] rounded-lg p-4 carbon-overlay',
+        'bg-[#1a1a1a] rounded-lg p-4 carbon-overlay corner-flag',
         'border border-[#2a2a2a]',
-        'hover:border-[#ff2800]/50 transition-all duration-300',
-        'ferrari-hover-glow',
-        'card-reveal',
+        'hover:border-[#ff2800]/70 transition-all duration-300',
+        'ferrari-hover-glow speed-blur',
+        'card-reveal race-start',
         'green-light-sequence',
         showGreenLight && 'active',
         'speed-lines',
         className
       )}
+      style={{ animationDelay: `${Math.random() * 200}ms` }}
     >
-      {/* Top accent line */}
-      <div className="h-0.5 bg-gradient-to-r from-[#ff2800] via-[#ffcc00] to-[#ff2800] rounded-full mb-3 opacity-60" />
+      {/* Racing stripe accent */}
+      <div className="h-1 bg-gradient-to-r from-[#ff2800] via-[#ffcc00] to-[#ff2800] rounded-full mb-4 shadow-lg shadow-[#ff2800]/30" />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            {/* LED Status Indicator */}
-            <div
-              className={cn(
-                'w-2.5 h-2.5 rounded-full',
-                statusLedColors[agent.status],
-                (agent.status === 'running' || agent.status === 'starting') && 'led-pulse'
+            {/* LED Status Indicator - Racing Light */}
+            <div className="relative">
+              <div
+                className={cn(
+                  'w-3 h-3 rounded-full',
+                  statusLedColors[agent.status],
+                  (agent.status === 'running' || agent.status === 'starting') && 'led-pulse'
+                )}
+                style={{ backgroundColor: 'currentColor' }}
+              />
+              {/* Glow ring */}
+              {(agent.status === 'running' || agent.status === 'starting') && (
+                <div
+                  className="absolute inset-0 rounded-full animate-ping opacity-75"
+                  style={{ backgroundColor: 'currentColor' }}
+                />
               )}
-              style={{ backgroundColor: 'currentColor' }}
-            />
+            </div>
             <h3 className="text-lg font-semibold text-white truncate">
               {agent.name}
             </h3>
@@ -169,17 +180,23 @@ export function AgentCard({ agent, className }: AgentCardProps) {
         </span>
       </div>
 
-      {/* Fuel Gauge */}
+      {/* Fuel Gauge - Racing Style */}
       <div className="mb-4">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Fuel Level</span>
-          <span className="text-[10px] font-mono text-gray-500">{fuelLevel}%</span>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest font-mono">Fuel Level</span>
+          <span className="text-[10px] font-mono text-[#ffcc00] font-bold">{fuelLevel}%</span>
         </div>
-        <div className="h-1.5 bg-[#0a0a0a] rounded-full overflow-hidden">
+        <div className="h-2 bg-[#0a0a0a] rounded-full overflow-hidden border border-[#2a2a2a]">
           <div
-            className="h-full fuel-gauge rounded-full transition-all duration-500"
+            className={cn(
+              'h-full rounded-full transition-all duration-700 relative overflow-hidden',
+              fuelLevel > 60 ? 'fuel-gauge' : fuelLevel > 30 ? 'bg-gradient-to-r from-[#ffcc00] to-[#ff8000]' : 'bg-gradient-to-r from-[#ff2800] to-[#ff0000]'
+            )}
             style={{ width: `${fuelLevel}%` }}
-          />
+          >
+            {/* Speed lines on fuel bar */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-pulse" />
+          </div>
         </div>
       </div>
 
@@ -196,89 +213,88 @@ export function AgentCard({ agent, className }: AgentCardProps) {
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-2">
-        {/* Light Green (Start) */}
+      {/* Action Buttons - Racing Pit Controls */}
+      <div className="flex gap-2 pt-2 border-t border-[#2a2a2a]">
+        {/* Light Green (Start) - Green Flag */}
         <button
           onClick={handleStart}
           disabled={isRunning || isLoading}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold',
-            'transition-colors duration-200',
+            'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-xs font-bold uppercase tracking-wider',
+            'transition-all duration-200',
             'btn-ferrari',
             isRunning || isLoading
-              ? 'bg-[#1a1a1a] text-gray-600 cursor-not-allowed'
-              : 'bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-700/40 glow-green'
+              ? 'bg-[#0a0a0a] text-gray-700 cursor-not-allowed border border-[#1a1a1a]'
+              : 'bg-green-900/40 text-green-400 hover:bg-green-900/60 border border-green-700/50 glow-green hover:scale-[1.02] active:scale-[0.98]'
           )}
         >
           {isStarting ? (
-            <div className="tachometer-spinner w-3.5 h-3.5" />
+            <div className="tachometer-spinner w-4 h-4" />
           ) : (
             <Play className="w-3.5 h-3.5" />
           )}
-          Light Green
+          <span className="hidden sm:inline">Green</span>
         </button>
 
-        {/* Box This Car (Stop) */}
+        {/* Box This Car (Stop) - Red Flag */}
         <button
           onClick={handleStop}
           disabled={isStopped || isLoading}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold',
-            'transition-colors duration-200',
+            'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-xs font-bold uppercase tracking-wider',
+            'transition-all duration-200',
             'btn-ferrari',
             isStopped || isLoading
-              ? 'bg-[#1a1a1a] text-gray-600 cursor-not-allowed'
-              : 'bg-red-900/30 text-[#ff2800] hover:bg-red-900/50 border border-red-700/40 glow-red'
+              ? 'bg-[#0a0a0a] text-gray-700 cursor-not-allowed border border-[#1a1a1a]'
+              : 'bg-red-900/40 text-[#ff2800] hover:bg-red-900/60 border border-red-700/50 glow-red hover:scale-[1.02] active:scale-[0.98]'
           )}
         >
           {isStopping ? (
-            <div className="tachometer-spinner w-3.5 h-3.5" />
+            <div className="tachometer-spinner w-4 h-4" />
           ) : (
             <Square className="w-3.5 h-3.5" />
           )}
-          Box
+          <span className="hidden sm:inline">Box</span>
         </button>
 
-        {/* Pit Stop (Restart) */}
+        {/* Pit Stop (Restart) - Yellow Flag */}
         <button
           onClick={handleRestart}
           disabled={isLoading}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold',
-            'transition-colors duration-200',
+            'flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-md text-xs font-bold uppercase tracking-wider',
+            'transition-all duration-200',
             'btn-ferrari',
             isLoading
-              ? 'bg-[#1a1a1a] text-gray-600 cursor-not-allowed'
-              : 'bg-[#ffcc00]/10 text-[#ffcc00] hover:bg-[#ffcc00]/20 border border-[#ffcc00]/30 glow-yellow'
+              ? 'bg-[#0a0a0a] text-gray-700 cursor-not-allowed border border-[#1a1a1a]'
+              : 'bg-[#ffcc00]/10 text-[#ffcc00] hover:bg-[#ffcc00]/20 border border-[#ffcc00]/40 glow-yellow hover:scale-[1.02] active:scale-[0.98]'
           )}
         >
           {isRestarting ? (
-            <div className="tachometer-spinner w-3.5 h-3.5" />
+            <div className="tachometer-spinner w-4 h-4" />
           ) : (
             <RotateCcw className="w-3.5 h-3.5" />
           )}
-          Pit Stop
+          <span className="hidden sm:inline">Pit</span>
         </button>
 
-        {/* Retire (Delete) */}
+        {/* Retire (Delete) - Black Flag */}
         <button
           onClick={handleDelete}
           disabled={isLoading || !isStopped}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold',
-            'transition-colors duration-200',
+            'flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold uppercase tracking-wider',
+            'transition-all duration-200',
             isLoading || !isStopped
-              ? 'bg-[#1a1a1a] text-gray-600 cursor-not-allowed'
-              : 'bg-red-900/20 text-red-400 hover:bg-red-900/40 border border-red-800/40'
+              ? 'bg-[#0a0a0a] text-gray-700 cursor-not-allowed border border-[#1a1a1a]'
+              : 'bg-gray-900/40 text-gray-500 hover:bg-red-900/30 hover:text-red-400 border border-gray-800 hover:border-red-800/50'
           )}
         >
           {isDeleting ? (
-            <div className="tachometer-spinner w-3.5 h-3.5" />
+            <div className="tachometer-spinner w-4 h-4" />
           ) : (
             <Trash2 className="w-3.5 h-3.5" />
           )}
-          Retire
         </button>
       </div>
     </div>

@@ -235,3 +235,224 @@ export async function deleteMemory(key: string): Promise<boolean> {
 export async function listMemory(): Promise<{ key: string; value: string }[]> {
   return fetchApi<{ key: string; value: string }[]>('/api/memory');
 }
+
+// ============================================
+// Streaming API Functions
+// ============================================
+
+/**
+ * SSE streaming callback interface
+ */
+export interface StreamCallbacks {
+  onToken: (token: string) => void;
+  onDone: (data: StreamDoneData) => void;
+  onError: (error: Error) => void;
+  onHeartbeat?: () => void;
+}
+
+/**
+ * Streaming configuration options
+ */
+export interface StreamOptions {
+  /** Maximum time to wait for connection (ms) */
+  connectionTimeout?: number;
+  /** Maximum streaming duration (ms) */
+  maxDuration?: number;
+  /** Maximum reconnection attempts */
+  maxRetries?: number;
+  /** Time between reconnection attempts (ms) */
+  retryDelay?: number;
+  /** Heartbeat interval (ms) */
+  heartbeatInterval?: number;
+}
+
+/**
+ * Data sent when streaming is complete
+ */
+export interface StreamDoneData {
+  finishReason?: string;
+  steps?: number;
+  toolCalls?: number;
+  taskId?: string;
+}
+
+/**
+ * Connect to SSE stream for agent execution with reconnection, timeout, and heartbeat support
+ * Returns the EventSource for external control
+ */
+export function streamAgentExecution(
+  agentId: string,
+  prompt: string,
+  callbacks: StreamCallbacks,
+  taskId?: string,
+  options: StreamOptions = {}
+): EventSource {
+  const {
+    connectionTimeout = 10000,
+    maxDuration = 300000, // 5 minutes default max
+    maxRetries = 3,
+    retryDelay = 1000,
+    heartbeatInterval = 30000 // 30 seconds
+  } = options;
+
+  const params = new URLSearchParams({ prompt });
+  if (taskId) {
+    params.append('taskId', taskId);
+  }
+
+  let eventSource: EventSource | null = null;
+  let retryCount = 0;
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  let connectionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Track if stream is active for reconnection logic
+  let isStreamActive = true;
+
+  const createEventSource = () => {
+    const url = `${baseURL}/api/agents/${encodeURIComponent(agentId)}/execute/stream?${params.toString()}`;
+    return new EventSource(url);
+  };
+
+  const cleanup = () => {
+    isStreamActive = false;
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    if (timeoutTimer) {
+      clearTimeout(timeoutTimer);
+      timeoutTimer = null;
+    }
+    if (connectionTimer) {
+      clearTimeout(connectionTimer);
+      connectionTimer = null;
+    }
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+  };
+
+  const handleError = (error: Error) => {
+    cleanup();
+    callbacks.onError(error);
+  };
+
+  const setupEventSource = (es: EventSource) => {
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        // Handle heartbeat/ping from server
+        if (data.heartbeat || data.type === 'ping') {
+          if (callbacks.onHeartbeat) {
+            callbacks.onHeartbeat();
+          }
+          return;
+        }
+
+        if (data.error) {
+          callbacks.onError(new Error(data.error));
+          cleanup();
+          return;
+        }
+
+        if (data.token) {
+          callbacks.onToken(data.token);
+        }
+
+        if (data.done) {
+          callbacks.onDone({
+            finishReason: data.finishReason,
+            steps: data.steps,
+            toolCalls: data.toolCalls,
+            taskId: data.taskId
+          });
+          cleanup();
+        }
+      } catch (error) {
+        callbacks.onError(error instanceof Error ? error : new Error('Failed to parse SSE data'));
+        cleanup();
+      }
+    };
+
+    es.onerror = () => {
+      // Attempt reconnection if we haven't exceeded max retries
+      if (isStreamActive && retryCount < maxRetries) {
+        retryCount++;
+        console.warn(`SSE connection lost, attempting reconnection ${retryCount}/${maxRetries}...`);
+
+        // Clean up current event source
+        es.close();
+
+        // Retry after delay
+        setTimeout(() => {
+          if (isStreamActive) {
+            eventSource = createEventSource();
+            if (eventSource) {
+              setupEventSource(eventSource);
+            }
+          }
+        }, retryDelay * retryCount); // Exponential backoff
+      } else {
+        handleError(new Error('SSE connection failed after max retries'));
+      }
+    };
+  };
+
+  // Create initial connection
+  eventSource = createEventSource();
+
+  if (eventSource) {
+    setupEventSource(eventSource);
+
+    // Set up connection timeout
+    connectionTimer = setTimeout(() => {
+      if (eventSource && eventSource.readyState === EventSource.CONNECTING) {
+        eventSource.close();
+        handleError(new Error('Connection timeout'));
+      }
+    }, connectionTimeout);
+
+    // Set up max duration timeout
+    timeoutTimer = setTimeout(() => {
+      console.warn('Max streaming duration reached');
+      cleanup();
+      callbacks.onError(new Error('Streaming timeout: maximum duration reached'));
+    }, maxDuration);
+
+    // Set up heartbeat ping to keep connection alive
+    heartbeatTimer = setInterval(() => {
+      if (isStreamActive && eventSource && eventSource.readyState === EventSource.OPEN) {
+        // Send ping to server via fetch
+        fetch(`${baseURL}/api/agents/${encodeURIComponent(agentId)}/ping`, {
+          method: 'POST',
+          keepalive: true
+        }).catch(() => {
+          // Ping failed, connection might be dead - let onerror handle it
+        });
+
+        // Trigger heartbeat callback
+        if (callbacks.onHeartbeat) {
+          callbacks.onHeartbeat();
+        }
+      }
+    }, heartbeatInterval);
+  }
+
+  // Return a proxy object that can be closed externally
+  const proxy: EventSource = {
+    close: cleanup,
+    // Add custom properties for state tracking
+    readyState: eventSource?.readyState ?? EventSource.CLOSED
+  } as EventSource;
+
+  // Override readyState to always get current state
+  Object.defineProperty(proxy, 'readyState', {
+    get: () => eventSource?.readyState ?? EventSource.CLOSED,
+    configurable: true
+  });
+
+  return proxy;
+}

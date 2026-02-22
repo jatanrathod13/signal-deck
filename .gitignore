@@ -1,0 +1,23 @@
+.specs/scratchpad/
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build artifacts
+client/dist/
+server/dist/
+
+# Local environment
+.env
+*.env
+server/.env
+client/.env
+
+# Local tooling artifacts
+.playwright-mcp/
+
+# Local agent/spec artifacts
+.claude/skills/
+.specs/tasks/done/*.implementation.md

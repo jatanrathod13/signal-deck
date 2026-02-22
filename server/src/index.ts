@@ -11,6 +11,7 @@ import agentRoutes from './routes/agentRoutes';
 import taskRoutes from './routes/taskRoutes';
 import memoryRoutes from './routes/memoryRoutes';
 import { initializeSocket } from './services/socketService';
+import { initializeAgentPersistence } from './services/agentService';
 import { startWorker, stopWorker } from '../worker/taskWorker';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -82,6 +83,8 @@ io.on('connection', (socket) => {
 
 // Start server
 export async function createServer(): Promise<http.Server> {
+  await initializeAgentPersistence();
+
   return new Promise((resolve) => {
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
