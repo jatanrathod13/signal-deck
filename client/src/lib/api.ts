@@ -3,7 +3,16 @@
  * HTTP client for REST API calls
  */
 
-import type { Agent, Plan, SharedMemoryValue, Task } from '../types';
+import type {
+  Agent,
+  Conversation,
+  ConversationMessage,
+  Plan,
+  Run,
+  RunEvent,
+  SharedMemoryValue,
+  Task
+} from '../types';
 
 // Base URL from environment or fallback to localhost
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -37,7 +46,7 @@ async function fetchApi<T>(
   // Check for error responses (non-2xx status or success: false)
   if (!response.ok || json.success === false) {
     const errorMessage = json.error || json.message || `HTTP error ${response.status}`;
-    throw new Error(errorMessage);
+    throw new Error(`${response.status}: ${errorMessage}`);
   }
 
   // Extract data from wrapped response { success, data }
@@ -137,6 +146,8 @@ export interface SubmitTaskData {
   stepId?: string;
   dependsOnTaskIds?: string[];
   metadata?: Record<string, unknown>;
+  conversationId?: string;
+  runId?: string;
 }
 
 export async function submitTask(data: SubmitTaskData): Promise<Task> {
@@ -234,6 +245,75 @@ export async function getPlan(id: string): Promise<Plan> {
 }
 
 // ============================================
+// Conversation API Functions
+// ============================================
+
+export interface CreateConversationData {
+  title?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConversationDetail {
+  conversation: Conversation;
+  messages: ConversationMessage[];
+}
+
+export interface SubmitConversationMessageData {
+  content: string;
+  agentId?: string;
+  taskType?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SubmitConversationMessageResult {
+  message: ConversationMessage;
+  run?: Run;
+  taskId: string;
+}
+
+export interface RunDetail {
+  run: Run;
+  events: RunEvent[];
+}
+
+export async function createConversation(data: CreateConversationData): Promise<Conversation> {
+  return fetchApi<Conversation>('/api/conversations', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function getConversations(): Promise<Conversation[]> {
+  return fetchApi<Conversation[]>('/api/conversations');
+}
+
+export async function getConversation(id: string): Promise<ConversationDetail> {
+  return fetchApi<ConversationDetail>(`/api/conversations/${encodeURIComponent(id)}`);
+}
+
+export async function submitConversationMessage(
+  conversationId: string,
+  data: SubmitConversationMessageData
+): Promise<SubmitConversationMessageResult> {
+  return fetchApi<SubmitConversationMessageResult>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/messages`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }
+  );
+}
+
+export async function getConversationEvents(conversationId: string, after?: string): Promise<RunEvent[]> {
+  const query = after ? `?after=${encodeURIComponent(after)}` : '';
+  return fetchApi<RunEvent[]>(`/api/conversations/${encodeURIComponent(conversationId)}/events${query}`);
+}
+
+export async function getRun(runId: string): Promise<RunDetail> {
+  return fetchApi<RunDetail>(`/api/runs/${encodeURIComponent(runId)}`);
+}
+
+// ============================================
 // Metrics API Functions
 // ============================================
 
@@ -252,6 +332,44 @@ export interface MetricsSnapshot {
 
 export async function getMetrics(): Promise<MetricsSnapshot> {
   return fetchApi<MetricsSnapshot>('/api/metrics');
+}
+
+// ============================================
+// Tool and System API Functions
+// ============================================
+
+export interface ToolCatalogItem {
+  name: string;
+  description: string;
+  source: 'builtin' | 'mcp';
+  enabled: boolean;
+}
+
+export interface ToolCatalogResponse {
+  agentId?: string;
+  tools: ToolCatalogItem[];
+  policy: {
+    allowTools?: string[];
+    denyTools?: string[];
+    maxToolCallsPerTask?: number;
+    perToolTimeoutMs?: number;
+  };
+  mcpServers: Array<{ name: string; url?: string; transport?: string }>;
+}
+
+export interface SystemHealthResponse {
+  status: 'ok' | 'degraded';
+  checks: Record<string, { ok: boolean; detail?: string }>;
+  timestamp: string;
+}
+
+export async function getToolCatalog(agentId?: string): Promise<ToolCatalogResponse> {
+  const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : '';
+  return fetchApi<ToolCatalogResponse>(`/api/tools/catalog${query}`);
+}
+
+export async function getSystemHealth(): Promise<SystemHealthResponse> {
+  return fetchApi<SystemHealthResponse>('/api/system/healthz');
 }
 
 // ============================================
@@ -307,8 +425,8 @@ export async function deleteMemory(key: string): Promise<boolean> {
  * List all memory keys
  * GET /api/memory
  */
-export async function listMemory(): Promise<{ key: string; value: string }[]> {
-  return fetchApi<{ key: string; value: string }[]>('/api/memory');
+export async function listMemory(): Promise<{ key: string; value: string | null }[]> {
+  return fetchApi<{ key: string; value: string | null }[]>('/api/memory');
 }
 
 // ============================================

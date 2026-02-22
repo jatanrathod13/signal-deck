@@ -3,14 +3,15 @@
  * Main application shell with tabbed panels
  */
 import { useEffect, useState } from 'react';
-import { Activity, Database, ListChecks, Users } from 'lucide-react';
+import { Activity, Bot, Database, ListChecks, Users } from 'lucide-react';
+import { AgentWorkspace } from './AgentWorkspace';
 import { AgentDeploy } from './AgentDeploy';
 import { AgentList } from './AgentList';
 import { MemoryPanel } from './MemoryPanel';
 import { TaskQueue } from './TaskQueue';
 import { cn } from '../lib/utils';
 
-type TabType = 'agents' | 'tasks' | 'memory';
+type TabType = 'workspace' | 'agents' | 'tasks' | 'memory';
 
 interface TabConfig {
   id: TabType;
@@ -19,6 +20,7 @@ interface TabConfig {
 }
 
 const tabs: TabConfig[] = [
+  { id: 'workspace', label: 'Workspace', icon: Bot },
   { id: 'agents', label: 'Agents', icon: Users },
   { id: 'tasks', label: 'Tasks', icon: ListChecks },
   { id: 'memory', label: 'Memory', icon: Database },
@@ -29,7 +31,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ className }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('agents');
+  const [activeTab, setActiveTab] = useState<TabType>('workspace');
   const [clock, setClock] = useState('00:00:00');
 
   useEffect(() => {
@@ -49,6 +51,8 @@ export function Dashboard({ className }: DashboardProps) {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'workspace':
+        return <AgentWorkspace className="tab-in" />;
       case 'agents':
         return (
           <div className="space-y-5 tab-in">
@@ -120,7 +124,7 @@ export function Dashboard({ className }: DashboardProps) {
         <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">{renderContent()}</main>
 
         <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0b1020]/85 px-3 py-2 backdrop-blur-xl sm:hidden">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;

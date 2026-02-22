@@ -3,3 +3,4 @@
  */
 export * from './agentStore';
 export * from './taskStore';
+export * from './conversationStore';
