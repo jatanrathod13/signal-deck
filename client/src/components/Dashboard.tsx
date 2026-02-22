@@ -2,7 +2,7 @@
  * Dashboard Component - Scuderia Ferrari PIT WALL
  * Main dashboard layout with racing-themed navigation
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Users, ListChecks, Database, LayoutDashboard } from 'lucide-react';
 import { AgentList } from './AgentList';
 import { AgentDeploy } from './AgentDeploy';
@@ -31,6 +31,22 @@ interface DashboardProps {
 
 export function Dashboard({ className }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('agents');
+
+  // Race timer effect
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      const elements = document.getElementById('race-timer') || document.getElementById('session-timer');
+      if (elements) elements.textContent = time;
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Render the content based on active tab
   const renderContent = () => {
@@ -63,22 +79,55 @@ export function Dashboard({ className }: DashboardProps) {
       {/* Vignette Overlay */}
       <div className="vignette-overlay" />
 
-      {/* Header */}
-      <header className="bg-[#141414] border-b border-[#2a2a2a] shadow-lg shadow-black/30 sticky top-0 z-10">
+      {/* Header - Race Control Timing Tower */}
+      <header className="bg-[#0d0d0d] border-b-2 border-[#ff2800] shadow-lg shadow-[#ff2800]/20 relative overflow-hidden">
+        {/* Timing tower diagonal accent */}
+        <div className="absolute top-0 left-0 w-32 h-full bg-gradient-to-r from-[#ff2800]/20 to-transparent skew-x-12" />
+
+        {/* Corner flags decoration */}
+        <div className="absolute top-0 right-0 w-16 h-16 overflow-hidden">
+          <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-[#ffcc00]" />
+          <div className="absolute top-2 right-2 w-6 h-6 border-t-2 border-r-2 border-[#ffcc00]/50" />
+        </div>
+
         <div className="racing-stripe" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo and Title */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#ff2800] shadow-lg shadow-[#ff2800]/20">
-                <LayoutDashboard className="w-6 h-6 text-white" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="flex items-center justify-between h-20">
+            {/* Logo and Title - Race Control Style */}
+            <div className="flex items-center gap-4">
+              {/* Timing Tower Icon */}
+              <div className="relative">
+                <div className="flex items-center justify-center w-14 h-14 rounded-lg bg-gradient-to-br from-[#ff2800] to-[#cc2000] shadow-lg shadow-[#ff2800]/30">
+                  <LayoutDashboard className="w-7 h-7 text-white" />
+                </div>
+                {/* Racing line accent */}
+                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-8 h-1 bg-[#ffcc00] rounded-full" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white tracking-wide">
+
+              <div className="race-start">
+                <h1 className="text-2xl font-bold text-white tracking-tight" style={{ fontFamily: 'Unbounded, sans-serif' }}>
                   PIT WALL
-                  <span className="ml-2 text-xs font-normal text-[#ffcc00] tracking-widest">SCUDERIA</span>
+                  <span className="ml-3 text-xs font-semibold text-[#ffcc00] tracking-[0.3em] uppercase">Scuderia</span>
                 </h1>
-                <p className="text-xs text-gray-500 hidden sm:block">Deploy, monitor, and coordinate racing agents</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-gray-500 font-mono">RACE CONTROL</span>
+                  <span className="text-[#ff2800]">●</span>
+                  <span className="text-xs text-gray-600 font-mono" id="race-timer">00:00:00</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Race Timer Display */}
+            <div className="hidden md:flex items-center gap-4">
+              <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-4 py-2">
+                <div className="text-[10px] text-gray-500 uppercase tracking-wider text-center">Session Time</div>
+                <div className="text-xl font-mono text-[#ffcc00] font-bold tracking-wider" id="session-timer">00:00:00</div>
+              </div>
+
+              {/* Live indicator */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-[#ff2800]/10 border border-[#ff2800]/30 rounded-lg">
+                <div className="w-2 h-2 bg-[#ff2800] rounded-full led-pulse" style={{ color: '#ff2800' }} />
+                <span className="text-xs font-semibold text-[#ff2800] uppercase tracking-wider">Live</span>
               </div>
             </div>
 
@@ -91,9 +140,9 @@ export function Dashboard({ className }: DashboardProps) {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      'p-2 rounded-lg transition-colors duration-200',
+                      'p-2 rounded-lg transition-all duration-200',
                       activeTab === tab.id
-                        ? 'bg-[#ff2800] text-white'
+                        ? 'bg-[#ff2800] text-white shadow-lg shadow-[#ff2800]/30'
                         : 'text-gray-400 hover:bg-[#1e1e1e]'
                     )}
                     title={tab.label}
@@ -107,11 +156,14 @@ export function Dashboard({ className }: DashboardProps) {
         </div>
       </header>
 
-      {/* Navigation Tabs - Desktop */}
-      <nav className="hidden sm:block bg-[#141414] border-b border-[#2a2a2a]">
+      {/* Navigation Tabs - Race Control Panel */}
+      <nav className="hidden sm:block bg-[#0d0d0d] border-b border-[#2a2a2a] relative">
+        {/* Timing line */}
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#ff2800] via-[#ffcc00] to-[#ff2800] opacity-50" />
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-1">
-            {tabs.map((tab) => {
+            {tabs.map((tab, index) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -119,14 +171,33 @@ export function Dashboard({ className }: DashboardProps) {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    'flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 transition-colors duration-200 tracking-wider',
+                    'relative flex items-center gap-2 px-5 py-4 text-sm font-bold uppercase tracking-wider transition-all duration-300',
                     isActive
-                      ? 'border-[#ff2800] text-[#ff2800]'
-                      : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-600'
+                      ? 'text-white'
+                      : 'text-gray-500 hover:text-gray-300'
                   )}
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
-                  <Icon className={cn('w-4 h-4', isActive ? 'text-[#ff2800]' : 'text-gray-600')} />
-                  {tab.label}
+                  {/* Tab indicator bar */}
+                  <div className={cn(
+                    'absolute bottom-0 left-0 right-0 h-0.5 transition-all duration-300',
+                    isActive ? 'bg-[#ff2800]' : 'bg-transparent'
+                  )} />
+
+                  {/* Active glow */}
+                  {isActive && (
+                    <div className="absolute inset-0 bg-[#ff2800]/5 blur-xl" />
+                  )}
+
+                  <Icon className={cn('w-4 h-4 relative z-10', isActive ? 'text-[#ff2800]' : 'text-gray-600')} />
+                  <span className="relative z-10">{tab.label}</span>
+
+                  {/* Corner flag on active */}
+                  {isActive && (
+                    <div className="absolute top-2 right-2 w-2 h-2">
+                      <div className="w-1 h-1 bg-[#ffcc00]" />
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -134,9 +205,12 @@ export function Dashboard({ className }: DashboardProps) {
         </div>
       </nav>
 
-      {/* Mobile Tab Bar - Bottom */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-[#141414] border-t border-[#2a2a2a] z-10">
-        <div className="flex justify-around py-2">
+      {/* Mobile Tab Bar - Pit Panel */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-[#0d0d0d] border-t-2 border-[#2a2a2a] z-10">
+        {/* Top racing stripe */}
+        <div className="h-0.5 bg-gradient-to-r from-[#ff2800] via-[#ffcc00] to-[#ff2800]" />
+
+        <div className="flex justify-around py-3">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -145,14 +219,17 @@ export function Dashboard({ className }: DashboardProps) {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors duration-200 min-w-[64px]',
+                  'flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-all duration-200 min-w-[64px] relative',
                   isActive
                     ? 'text-[#ff2800]'
                     : 'text-gray-500'
                 )}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-xs font-semibold tracking-wider">{tab.label}</span>
+                {isActive && (
+                  <div className="absolute inset-0 bg-[#ff2800]/10 rounded-lg blur-md" />
+                )}
+                <Icon className="w-5 h-5 relative z-10" />
+                <span className="text-[10px] font-bold uppercase tracking-wider relative z-10">{tab.label}</span>
               </button>
             );
           })}

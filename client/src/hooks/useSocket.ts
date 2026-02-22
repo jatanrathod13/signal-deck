@@ -8,8 +8,8 @@ import { useAgentStore } from '../stores/agentStore';
 import { useTaskStore } from '../stores/taskStore';
 import type { AgentStatusEvent, TaskStatusEvent, ErrorEvent, TaskCompletedEvent, Agent, Task } from '../types';
 
-// Socket server URL - configurable via environment variable
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+// Socket server URL - use relative path for Vite proxy, or localhost for direct connection
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || ''; // Empty = same origin, proxied by Vite
 
 interface UseSocketReturn {
   socket: Socket | null;

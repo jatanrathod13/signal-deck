@@ -2,8 +2,8 @@
  * TaskQueue Component - Scuderia Ferrari Race Queue
  * Displays tasks as a race starting grid with racing terminology
  */
-import { useState, useMemo } from 'react';
-import { ListChecks, RefreshCw, Loader2, Clock, PlayCircle, CheckCircle, XCircle, Ban, Plus } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { ListChecks, RefreshCw, Loader2, Clock, PlayCircle, CheckCircle, XCircle, Ban, Plus, Timer, Gauge } from 'lucide-react';
 import type { TaskStatus } from '../types';
 import { useTasks, useSubmitTask } from '../hooks/useTasks';
 import { useAgents } from '../hooks/useAgents';
@@ -15,7 +15,7 @@ import { cn } from '../lib/utils';
 const statusGroups: { label: string; value: TaskStatus | 'all'; icon: React.ElementType; color: string }[] = [
   { label: 'All Laps', value: 'all', icon: ListChecks, color: 'text-gray-400' },
   { label: 'On Grid', value: 'pending', icon: Clock, color: 'text-[#ffcc00]' },
-  { label: 'Racing', value: 'processing', icon: PlayCircle, color: 'text-[#ff2800]' },
+  { label: 'Racing', value: 'processing', icon: Gauge, color: 'text-[#ff2800]' },
   { label: 'Chequered', value: 'completed', icon: CheckCircle, color: 'text-green-400' },
   { label: 'DNF', value: 'failed', icon: XCircle, color: 'text-red-400' },
   { label: 'Black Flag', value: 'cancelled', icon: Ban, color: 'text-gray-500' },
@@ -33,6 +33,21 @@ export function TaskQueue({ className }: TaskQueueProps) {
   const [taskData, setTaskData] = useState('{}');
   const [priority, setPriority] = useState(1);
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // Session timer for live race timing
+  const [sessionTime, setSessionTime] = useState('00:00:00');
+
+  useEffect(() => {
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const minutes = Math.floor(elapsed / 60000);
+      const seconds = Math.floor((elapsed % 60000) / 1000);
+      const ms = Math.floor((elapsed % 1000) / 10);
+      setSessionTime(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`);
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch tasks with optional status filter
   const { data: tasks, isLoading, isError, error, refetch } = useTasks(
@@ -128,58 +143,77 @@ export function TaskQueue({ className }: TaskQueueProps) {
 
   return (
     <div className={cn('space-y-4', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ListChecks className="w-5 h-5 text-[#ff2800]" />
-          <h2 className="text-xl font-semibold text-white tracking-wide">Race Queue</h2>
+      {/* Header - Race Queue Control */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          {/* Timing tower icon */}
+          <div className="relative">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#ff2800] shadow-lg shadow-[#ff2800]/20">
+              <ListChecks className="w-5 h-5 text-white" />
+            </div>
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-[#ffcc00]" />
+          </div>
 
-          {/* Connection Status */}
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium',
-              isConnected
-                ? 'bg-green-900/30 text-green-400 border border-green-700/40'
-                : 'bg-gray-800 text-gray-500 border border-gray-700'
-            )}
-          >
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white tracking-wide" style={{ fontFamily: 'Unbounded, sans-serif' }}>Race Queue</h2>
+
+              {/* Session Timer */}
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-[#0a0a0a] border border-[#2a2a2a] rounded">
+                <Timer className="w-3 h-3 text-[#ffcc00]" />
+                <span className="text-xs font-mono text-[#ffcc00]">{sessionTime}</span>
+              </div>
+            </div>
+
+            {/* Connection Status */}
             <span
               className={cn(
-                'w-1.5 h-1.5 rounded-full',
-                isConnected ? 'bg-green-400 led-pulse' : 'bg-gray-600'
+                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium mt-1',
+                isConnected
+                  ? 'bg-green-900/30 text-green-400 border border-green-700/40'
+                  : 'bg-gray-800 text-gray-500 border border-gray-700'
               )}
-              style={isConnected ? { color: '#4ade80' } : undefined}
-            />
-            {isConnected ? 'Live Timing' : 'Offline'}
-          </span>
+            >
+              <span
+                className={cn(
+                  'w-1.5 h-1.5 rounded-full',
+                  isConnected ? 'bg-green-400 led-pulse' : 'bg-gray-600'
+                )}
+                style={isConnected ? { color: '#4ade80' } : undefined}
+              />
+              {isConnected ? 'Live Timing' : 'Offline'}
+            </span>
+          </div>
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowSubmitForm(true)}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
-              'bg-[#ff2800] text-white hover:bg-[#cc2000]',
-              'transition-colors duration-200'
-            )}
-          >
-            <Plus className="w-4 h-4" />
-            New Lap
-          </button>
-          <button
             onClick={() => refetch()}
             disabled={isLoading}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
-              'bg-[#1e1e1e] text-gray-400 hover:text-white hover:bg-[#2a2a2a]',
+              'flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-bold uppercase tracking-wider',
+              'bg-[#1a1a1a] text-gray-400 hover:text-white hover:bg-[#2a2a2a]',
               'border border-[#2a2a2a] hover:border-[#ff2800]/30',
-              'transition-colors duration-200',
+              'transition-all duration-200',
               isLoading && 'opacity-50 cursor-not-allowed'
             )}
           >
             <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
+          <button
+            onClick={() => setShowSubmitForm(true)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-bold uppercase tracking-wider',
+              'bg-gradient-to-r from-[#ff2800] to-[#cc2000] text-white hover:from-[#ff4000] hover:to-[#ff2800]',
+              'shadow-lg shadow-[#ff2800]/20 transition-all duration-200',
+              'hover:scale-[1.02] active:scale-[0.98]'
+            )}
+          >
+            <Plus className="w-4 h-4" />
+            New Lap
           </button>
         </div>
       </div>
@@ -327,8 +361,8 @@ export function TaskQueue({ className }: TaskQueueProps) {
         </div>
       )}
 
-      {/* Status Filter */}
-      <div className="flex flex-wrap gap-2">
+      {/* Status Filter - Sector Select */}
+      <div className="flex flex-wrap gap-2 pb-4 border-b border-[#2a2a2a]">
         {statusGroups.map((group) => {
           const Icon = group.icon;
           const count = group.value === 'all'
@@ -340,18 +374,17 @@ export function TaskQueue({ className }: TaskQueueProps) {
               key={group.value}
               onClick={() => setStatusFilter(group.value)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium',
-                'transition-colors duration-200 border',
+                'inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-bold uppercase tracking-wider transition-all duration-200 border',
                 statusFilter === group.value
-                  ? 'bg-[#ff2800] text-white border-[#ff2800]'
-                  : 'bg-[#1e1e1e] text-gray-400 border-[#2a2a2a] hover:border-[#ff2800]/40 hover:text-gray-300'
+                  ? 'bg-[#ff2800] text-white border-[#ff2800] shadow-lg shadow-[#ff2800]/20'
+                  : 'bg-[#1a1a1a] text-gray-400 border-[#2a2a2a] hover:border-[#ff2800]/40 hover:text-gray-300'
               )}
             >
               <Icon className={cn('w-4 h-4', statusFilter === group.value ? 'text-white' : group.color)} />
-              {group.label}
+              <span>{group.label}</span>
               <span
                 className={cn(
-                  'ml-1 px-1.5 py-0.5 rounded-full text-xs',
+                  'ml-1 px-1.5 py-0.5 rounded text-xs font-mono',
                   statusFilter === group.value
                     ? 'bg-[#cc2000] text-white'
                     : 'bg-[#0a0a0a] text-gray-500'

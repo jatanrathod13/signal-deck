@@ -1,18 +1,124 @@
 /**
  * AgentService - Agent lifecycle management service
  * Provides CRUD operations and lifecycle management for agents
+ * Supports Redis persistence for durability across restarts
  */
 
 import { EventEmitter } from 'events';
 import { Agent, AgentStatus } from '../../types';
 import { emitAgentStatus } from './socketService';
+import { redis } from '../../config/redis';
+
+// Redis key prefix for agents
+const AGENT_KEY_PREFIX = 'agent:';
+const AGENT_INDEX_KEY = 'agents:index';
 
 // Agent registry type
 type AgentRegistry = Map<string, Agent>;
 
+// In-memory cache for quick access (backward compatible)
+let agents: AgentRegistry = new Map();
+
+// Redis connection status
+let redisAvailable = false;
+
+// Initialize Redis connection and load agents
+async function initializeRedis(): Promise<void> {
+  try {
+    // Test Redis connection
+    await redis.ping();
+    redisAvailable = true;
+    console.log('Redis connected for agent persistence');
+
+    // Load existing agents from Redis on startup
+    await loadAgentsFromRedis();
+  } catch (error) {
+    console.warn('Redis unavailable, using in-memory storage only:', error);
+    redisAvailable = false;
+  }
+}
+
+// Load all agents from Redis into memory
+async function loadAgentsFromRedis(): Promise<void> {
+  try {
+    const agentIds = await redis.smembers(AGENT_INDEX_KEY);
+
+    if (agentIds.length > 0) {
+      const pipeline = redis.pipeline();
+
+      for (const agentId of agentIds) {
+        pipeline.get(`${AGENT_KEY_PREFIX}${agentId}`);
+      }
+
+      const results = await pipeline.exec();
+
+      if (results) {
+        for (const [err, value] of results) {
+          if (!err && value) {
+            try {
+              const agentData = JSON.parse(value as string);
+              // Convert date strings back to Date objects
+              agentData.createdAt = new Date(agentData.createdAt);
+              agentData.updatedAt = new Date(agentData.updatedAt);
+              agents.set(agentData.id, agentData);
+            } catch (parseError) {
+              console.error('Failed to parse agent data:', parseError);
+            }
+          }
+        }
+      }
+
+      console.log(`Loaded ${agents.size} agents from Redis`);
+    }
+  } catch (error) {
+    console.error('Failed to load agents from Redis:', error);
+    // Continue with empty in-memory store
+  }
+}
+
+// Save agent to Redis
+async function saveAgentToRedis(agent: Agent): Promise<void> {
+  if (!redisAvailable) return;
+
+  try {
+    const key = `${AGENT_KEY_PREFIX}${agent.id}`;
+    const value = JSON.stringify(agent);
+
+    // Use pipeline for atomic operations
+    const pipeline = redis.pipeline();
+    pipeline.set(key, value);
+    pipeline.sadd(AGENT_INDEX_KEY, agent.id);
+    await pipeline.exec();
+  } catch (error) {
+    console.error('Failed to save agent to Redis:', error);
+    // Continue with in-memory only
+  }
+}
+
+// Update agent in Redis
+async function updateAgentInRedis(agent: Agent): Promise<void> {
+  await saveAgentToRedis(agent);
+}
+
+// Delete agent from Redis
+async function deleteAgentFromRedis(agentId: string): Promise<void> {
+  if (!redisAvailable) return;
+
+  try {
+    const key = `${AGENT_KEY_PREFIX}${agentId}`;
+    const pipeline = redis.pipeline();
+    pipeline.del(key);
+    pipeline.srem(AGENT_INDEX_KEY, agentId);
+    await pipeline.exec();
+  } catch (error) {
+    console.error('Failed to delete agent from Redis:', error);
+    // Continue with in-memory only
+  }
+}
+
 // Create EventEmitter for lifecycle events
 class AgentService extends EventEmitter {
-  private agents: AgentRegistry = new Map();
+  // Uses module-level agents Map for backward compatibility
 
   /**
    * Deploy a new agent with idle status
@@ -35,7 +141,13 @@ class AgentService extends EventEmitter {
       updatedAt: now
     };
 
-    this.agents.set(id, agent);
+    agents.set(id, agent);
+
+    // Persist to Redis asynchronously
+    saveAgentToRedis(agent).catch(err => {
+      console.error('Failed to persist agent to Redis:', err);
+    });
+
     this.emit('agent:registered', { agentId: id, agent });
     emitAgentStatus(agent);
 
@@ -48,13 +160,18 @@ class AgentService extends EventEmitter {
    * @returns Updated agent object
    */
   startAgent(id: string): Agent {
-    const agent = this.agents.get(id);
+    const agent = agents.get(id);
     if (!agent) {
       throw new Error('Agent not found');
     }
 
     agent.status = 'running';
     agent.updatedAt = new Date();
+
+    // Persist to Redis asynchronously
+    updateAgentInRedis(agent).catch(err => {
+      console.error('Failed to update agent in Redis:', err);
+    });
 
     this.emit('agent:started', { agentId: id, agent });
     emitAgentStatus(agent);
@@ -68,13 +185,18 @@ class AgentService extends EventEmitter {
    * @returns Updated agent object
    */
   stopAgent(id: string): Agent {
-    const agent = this.agents.get(id);
+    const agent = agents.get(id);
     if (!agent) {
       throw new Error('Agent not found');
     }
 
     agent.status = 'stopped';
     agent.updatedAt = new Date();
+
+    // Persist to Redis asynchronously
+    updateAgentInRedis(agent).catch(err => {
+      console.error('Failed to update agent in Redis:', err);
+    });
 
     this.emit('agent:stopped', { agentId: id, agent });
     emitAgentStatus(agent);
@@ -88,7 +210,7 @@ class AgentService extends EventEmitter {
    * @returns Updated agent object
    */
   restartAgent(id: string): Agent {
-    const agent = this.agents.get(id);
+    const agent = agents.get(id);
     if (!agent) {
       throw new Error('Agent not found');
     }
@@ -106,7 +228,7 @@ class AgentService extends EventEmitter {
    * @returns Agent object or undefined
    */
   getAgent(id: string): Agent | undefined {
-    return this.agents.get(id);
+    return agents.get(id);
   }
 
   /**
@@ -114,7 +236,7 @@ class AgentService extends EventEmitter {
    * @returns Array of all agents
    */
   listAgents(): Agent[] {
-    return Array.from(this.agents.values());
+    return Array.from(agents.values());
   }
 
   /**
@@ -123,12 +245,18 @@ class AgentService extends EventEmitter {
    * @returns Success status
    */
   deleteAgent(id: string): boolean {
-    const agent = this.agents.get(id);
+    const agent = agents.get(id);
     if (!agent) {
       return false;
     }
 
-    this.agents.delete(id);
+    agents.delete(id);
+
+    // Remove from Redis asynchronously
+    deleteAgentFromRedis(id).catch(err => {
+      console.error('Failed to delete agent from Redis:', err);
+    });
+
     this.emit('agent:deleted', { agentId: id });
 
     return true;
@@ -166,6 +294,12 @@ export const listAgents = (): Agent[] =>
 
 export const deleteAgent = (id: string): boolean =>
   agentService.deleteAgent(id);
+
+// Export initialization function for startup loading
+export const initializeAgentPersistence = initializeRedis;
+
+// Export Redis availability status
+export const isAgentPersistenceReady = (): boolean => redisAvailable;
 
 // Export the EventEmitter for typing purposes
 export { AgentService };

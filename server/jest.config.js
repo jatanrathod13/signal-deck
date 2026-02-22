@@ -19,4 +19,5 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  modulePaths: ['<rootDir>', '<rootDir>/node_modules'],
 };

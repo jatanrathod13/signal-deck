@@ -6,6 +6,21 @@
 // Agent status types
 export type AgentStatus = 'registered' | 'starting' | 'running' | 'idle' | 'error' | 'stopped';
 
+// MCP Server Configuration
+export interface McpServerConfig {
+  url?: string;           // For HTTP MCP servers
+  name: string;
+  transport?: 'stdio' | 'http';
+  command?: string;       // For stdio transport
+  args?: string[];        // For stdio transport
+}
+
+// Agent configuration
+export interface AgentConfig {
+  mcpServers?: McpServerConfig[];
+  [key: string]: unknown;
+}
+
 // Task status types
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
@@ -14,7 +29,7 @@ export interface Agent {
   id: string;
   name: string;
   type: string;
-  config: Record<string, unknown>;
+  config: AgentConfig;
   status: AgentStatus;
   createdAt: Date;
   updatedAt: Date;

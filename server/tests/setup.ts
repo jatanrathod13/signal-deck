@@ -1,3 +1,5 @@
+import { redis } from '../config/redis';
+
 // Global test setup
 beforeAll(() => {
   // Set test environment variables
@@ -7,8 +9,14 @@ beforeAll(() => {
   process.env.PORT = '3000';
 });
 
-afterAll(() => {
-  // Cleanup after all tests
+afterAll(async () => {
+  try {
+    if (redis.status !== 'end') {
+      await redis.quit();
+    }
+  } catch (_error) {
+    redis.disconnect();
+  }
 });
 
 // Global test timeout

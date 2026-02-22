@@ -95,7 +95,7 @@ function createTask(agentId: string, type: string, data: Record<string, unknown>
 /**
  * Update task status and metadata
  */
-function updateTaskStatus(taskId: string, status: TaskStatus, additionalUpdates?: Partial<Task>): Task | undefined {
+export function updateTaskStatus(taskId: string, status: TaskStatus, additionalUpdates?: Partial<Task>): Task | undefined {
   const task = taskStore.get(taskId);
   if (!task) {
     return undefined;
