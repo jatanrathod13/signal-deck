@@ -1,22 +1,21 @@
 /**
- * AgentList Component - Scuderia Ferrari Pit Crew
- * Displays a list of all agents with racing-themed status filters
+ * AgentList Component
+ * Displays all agents with status filters
  */
 import { useState } from 'react';
-import { Users, RefreshCw, Loader2 } from 'lucide-react';
-import type { AgentStatus } from '../types';
+import { Loader2, RefreshCw, Users } from 'lucide-react';
 import { useAgents } from '../hooks/useAgents';
 import { useSocket } from '../hooks/useSocket';
-import { AgentCard } from './AgentCard';
+import type { AgentStatus } from '../types';
 import { cn } from '../lib/utils';
+import { AgentCard } from './AgentCard';
 
-// Status filter options
 const statusFilters: { label: string; value: AgentStatus | 'all' }[] = [
-  { label: 'All Drivers', value: 'all' },
-  { label: 'Racing', value: 'running' },
-  { label: 'Pit Lane', value: 'idle' },
-  { label: 'DNF', value: 'error' },
-  { label: 'Retired', value: 'stopped' },
+  { label: 'All', value: 'all' },
+  { label: 'Running', value: 'running' },
+  { label: 'Idle', value: 'idle' },
+  { label: 'Error', value: 'error' },
+  { label: 'Stopped', value: 'stopped' },
 ];
 
 interface AgentListProps {
@@ -25,78 +24,52 @@ interface AgentListProps {
 
 export function AgentList({ className }: AgentListProps) {
   const { data: agents, isLoading, isError, error, refetch } = useAgents();
-
-  // Initialize socket connection for real-time updates
   const { isConnected } = useSocket();
-
-  // Filter state
   const [localStatusFilter, setLocalStatusFilter] = useState<AgentStatus | 'all'>('all');
 
-  // Ensure agents is always an array
   const agentsList = Array.isArray(agents) ? agents : [];
-
-  // Filter agents based on status
   const filteredAgents = agentsList.filter(
     (agent) => localStatusFilter === 'all' || agent.status === localStatusFilter
   );
 
   return (
-    <div className={cn('space-y-4', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-[#ff2800]" />
-          <h2 className="text-xl font-semibold text-white tracking-wide">Pit Crew</h2>
-
-          {/* Connection Status */}
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium',
-              isConnected
-                ? 'bg-green-900/30 text-green-400 border border-green-700/40'
-                : 'bg-gray-800 text-gray-500 border border-gray-700'
-            )}
-          >
-            <span
-              className={cn(
-                'w-1.5 h-1.5 rounded-full',
-                isConnected ? 'bg-green-400 led-pulse' : 'bg-gray-600'
-              )}
-              style={isConnected ? { color: '#4ade80' } : undefined}
-            />
-            {isConnected ? 'Radio Live' : 'Radio Off'}
+    <section className={cn('space-y-4', className)}>
+      <header className="glass-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-blue-300/30 bg-blue-300/10 p-2">
+            <Users className="h-4 w-4 text-blue-200" />
+          </div>
+          <div>
+            <p className="kicker">Runtime Fleet</p>
+            <h2 className="panel-title">Agents</h2>
+          </div>
+          <span className={cn('signal-pill', !isConnected && 'border-slate-400/30 bg-slate-500/10 text-slate-300')}>
+            <span className={cn('status-dot', isConnected ? 'live-pulse text-emerald-300' : 'text-slate-500')} />
+            {isConnected ? 'Socket Connected' : 'Socket Offline'}
           </span>
         </div>
 
-        {/* Refresh Button */}
         <button
           onClick={() => refetch()}
           disabled={isLoading}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
-            'bg-[#1e1e1e] text-gray-400 hover:text-white hover:bg-[#2a2a2a]',
-            'border border-[#2a2a2a] hover:border-[#ff2800]/30',
-            'transition-colors duration-200',
-            isLoading && 'opacity-50 cursor-not-allowed'
+            'btn-ghost inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-all',
+            isLoading && 'cursor-not-allowed opacity-60'
           )}
         >
-          <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
+          <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
           Refresh
         </button>
-      </div>
+      </header>
 
-      {/* Status Filter */}
       <div className="flex flex-wrap gap-2">
         {statusFilters.map((filter) => (
           <button
             key={filter.value}
             onClick={() => setLocalStatusFilter(filter.value)}
             className={cn(
-              'px-3 py-1 rounded-full text-sm font-medium transition-colors duration-200',
-              'border',
-              localStatusFilter === filter.value
-                ? 'bg-[#ff2800] text-white border-[#ff2800]'
-                : 'bg-[#1e1e1e] text-gray-400 border-[#2a2a2a] hover:border-[#ff2800]/40 hover:text-gray-300'
+              'rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-all',
+              localStatusFilter === filter.value ? 'btn-primary' : 'btn-ghost'
             )}
           >
             {filter.label}
@@ -104,52 +77,38 @@ export function AgentList({ className }: AgentListProps) {
         ))}
       </div>
 
-      {/* Loading State */}
       {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#ff2800] animate-spin" />
-          <span className="ml-2 text-gray-500">Loading pit crew...</span>
+        <div className="glass-panel flex items-center justify-center py-10 text-slate-300">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin text-cyan-200" />
+          Loading agents...
         </div>
       )}
 
-      {/* Error State */}
       {isError && (
-        <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-4">
-          <p className="text-red-400 font-medium">Radio failure - cannot load pit crew</p>
-          <p className="text-red-500/80 text-sm mt-1">
-            {error?.message || 'Unknown error occurred'}
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="mt-2 text-sm text-[#ff2800] hover:text-[#ffcc00] font-medium"
-          >
-            Try again
-          </button>
+        <div className="glass-panel rounded-xl border border-rose-300/30 bg-rose-300/10 p-4 text-sm text-rose-100">
+          <p className="font-semibold">Unable to load agents</p>
+          <p className="mt-1 text-rose-200/90">{error?.message || 'Unknown error occurred'}</p>
         </div>
       )}
 
-      {/* Empty State */}
       {!isLoading && !isError && filteredAgents.length === 0 && (
-        <div className="bg-[#1e1e1e] border border-[#2a2a2a] rounded-lg p-8 text-center">
-          <Users className="w-12 h-12 text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">No drivers on the grid</p>
-          <p className="text-gray-600 text-sm mt-1">
-            {localStatusFilter !== 'all'
-              ? `No drivers with status "${localStatusFilter}"`
-              : 'Deploy a new driver to join the race'}
+        <div className="glass-panel p-8 text-center">
+          <Users className="mx-auto mb-3 h-10 w-10 text-slate-500" />
+          <p className="font-medium text-slate-200">No agents in this view</p>
+          <p className="mt-1 text-sm text-slate-400">
+            {localStatusFilter !== 'all' ? `No agents with status "${localStatusFilter}"` : 'Deploy an agent to get started.'}
           </p>
         </div>
       )}
 
-      {/* Agent Grid */}
       {!isLoading && !isError && filteredAgents.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredAgents.map((agent) => (
             <AgentCard key={agent.id} agent={agent} />
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
