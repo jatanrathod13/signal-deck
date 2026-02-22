@@ -8,6 +8,7 @@ import { redis as defaultRedis } from '../../config/redis';
 
 // Default TTL in seconds (1 hour)
 const DEFAULT_TTL = 3600;
+const MEMORY_NAMESPACE = 'memory';
 
 // Allow custom Redis connection for testing
 let redisInstance: Redis = defaultRedis;
@@ -97,4 +98,40 @@ export async function getJsonValue<T>(key: string): Promise<T | null> {
 export async function refreshTTL(key: string, ttl: number = DEFAULT_TTL): Promise<boolean> {
   const result = await redisInstance.expire(key, ttl);
   return result === 1;
+}
+
+/**
+ * Build namespaced memory key for memory-tier storage.
+ */
+function buildTierKey(tier: 'working' | 'episodic' | 'shared', key: string): string {
+  return `${MEMORY_NAMESPACE}:${tier}:${key}`;
+}
+
+/**
+ * Write a value into a specific memory tier.
+ */
+export async function setTieredValue(
+  tier: 'working' | 'episodic' | 'shared',
+  key: string,
+  value: string,
+  ttl: number = DEFAULT_TTL
+): Promise<void> {
+  await setValue(buildTierKey(tier, key), value, ttl);
+}
+
+/**
+ * Read value from a specific memory tier.
+ */
+export async function getTieredValue(
+  tier: 'working' | 'episodic' | 'shared',
+  key: string
+): Promise<string | null> {
+  return getValue(buildTierKey(tier, key));
+}
+
+/**
+ * List keys within a tier.
+ */
+export async function listTierKeys(tier: 'working' | 'episodic' | 'shared'): Promise<string[]> {
+  return listKeys(buildTierKey(tier, '*'));
 }

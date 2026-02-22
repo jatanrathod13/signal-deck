@@ -10,8 +10,12 @@ import http from 'http';
 import agentRoutes from './routes/agentRoutes';
 import taskRoutes from './routes/taskRoutes';
 import memoryRoutes from './routes/memoryRoutes';
+import planRoutes from './routes/planRoutes';
+import metricsRoutes from './routes/metricsRoutes';
 import { initializeSocket } from './services/socketService';
 import { initializeAgentPersistence } from './services/agentService';
+import { bootstrapTaskStore } from './services/taskQueueService';
+import { initializePlans } from './services/planService';
 import { startWorker, stopWorker } from '../worker/taskWorker';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -36,6 +40,12 @@ app.use('/api/tasks', taskRoutes);
 
 // Memory routes
 app.use('/api/memory', memoryRoutes);
+
+// Plan routes
+app.use('/api/plans', planRoutes);
+
+// Metrics routes
+app.use('/api/metrics', metricsRoutes);
 
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -84,6 +94,8 @@ io.on('connection', (socket) => {
 // Start server
 export async function createServer(): Promise<http.Server> {
   await initializeAgentPersistence();
+  await bootstrapTaskStore();
+  await initializePlans();
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {

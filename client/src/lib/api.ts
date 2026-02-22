@@ -3,7 +3,7 @@
  * HTTP client for REST API calls
  */
 
-import type { Agent, Task, SharedMemoryValue } from '../types';
+import type { Agent, Plan, SharedMemoryValue, Task } from '../types';
 
 // Base URL from environment or fallback to localhost
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -131,6 +131,12 @@ export interface SubmitTaskData {
   type: string;
   data: Record<string, unknown>;
   priority?: number;
+  idempotencyKey?: string;
+  parentTaskId?: string;
+  planId?: string;
+  stepId?: string;
+  dependsOnTaskIds?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export async function submitTask(data: SubmitTaskData): Promise<Task> {
@@ -150,11 +156,27 @@ export async function getTasks(status?: string): Promise<Task[]> {
 }
 
 /**
+ * Get tasks for a plan
+ * GET /api/tasks?planId=...
+ */
+export async function getTasksByPlan(planId: string): Promise<Task[]> {
+  return fetchApi<Task[]>(`/api/tasks?planId=${encodeURIComponent(planId)}`);
+}
+
+/**
  * Get a single task by ID
  * GET /api/tasks/:id
  */
 export async function getTask(id: string): Promise<Task> {
   return fetchApi<Task>(`/api/tasks/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Get child tasks for a parent task
+ * GET /api/tasks/:id/children
+ */
+export async function getChildTasks(id: string): Promise<Task[]> {
+  return fetchApi<Task[]>(`/api/tasks/${encodeURIComponent(id)}/children`);
 }
 
 /**
@@ -177,6 +199,59 @@ export async function retryTask(id: string): Promise<Task> {
   return fetchApi<Task>(`/api/tasks/${encodeURIComponent(id)}/retry`, {
     method: 'POST',
   });
+}
+
+// ============================================
+// Plan API Functions
+// ============================================
+
+export interface CreatePlanData {
+  objective: string;
+  defaultAgentId: string;
+  stepPrompts: string[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface OrchestrationSummary {
+  planId: string;
+  totalSteps: number;
+  readySteps: number;
+}
+
+export async function createPlan(data: CreatePlanData): Promise<OrchestrationSummary> {
+  return fetchApi<OrchestrationSummary>('/api/plans', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getPlans(): Promise<Plan[]> {
+  return fetchApi<Plan[]>('/api/plans');
+}
+
+export async function getPlan(id: string): Promise<Plan> {
+  return fetchApi<Plan>(`/api/plans/${encodeURIComponent(id)}`);
+}
+
+// ============================================
+// Metrics API Functions
+// ============================================
+
+export interface MetricsSnapshot {
+  tasksSubmitted: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  tasksCancelled: number;
+  toolCalls: number;
+  toolFailures: number;
+  plansCreated: number;
+  planStepsCompleted: number;
+  planStepsFailed: number;
+  startedAt: Date;
+}
+
+export async function getMetrics(): Promise<MetricsSnapshot> {
+  return fetchApi<MetricsSnapshot>('/api/metrics');
 }
 
 // ============================================
