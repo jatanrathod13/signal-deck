@@ -4,7 +4,7 @@
  */
 
 import { ToolLoopAgent, hasToolCall, tool, zodSchema } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { getAgent } from './agentService';
 import { Task, ToolPolicy } from '../../types';
@@ -17,10 +17,73 @@ import {
 import { getMcpToolsForAgent, getMcpToolsFromServers } from './mcpClientService';
 import { createAgentTrace, formatTraceMetadata, isTracingEnabled } from './tracingService';
 import { applyToolPolicies, clearTaskToolBudget } from './toolPolicyService';
+import { appendRunEvent } from './conversationService';
 import { createAndStartPlan } from './orchestratorService';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+interface ToolCatalogItem {
+  name: string;
+  description: string;
+  source: 'builtin' | 'mcp';
+  enabled: boolean;
+}
+
+const BUILTIN_TOOL_CATALOG: ToolCatalogItem[] = [
+  {
+    name: 'readSharedMemory',
+    description: 'Read a value from shared memory by key.',
+    source: 'builtin',
+    enabled: true
+  },
+  {
+    name: 'writeSharedMemory',
+    description: 'Write a value into shared memory by key.',
+    source: 'builtin',
+    enabled: true
+  },
+  {
+    name: 'readTieredMemory',
+    description: 'Read value from a memory tier (working|episodic|shared).',
+    source: 'builtin',
+    enabled: true
+  },
+  {
+    name: 'writeTieredMemory',
+    description: 'Write value to a memory tier (working|episodic|shared).',
+    source: 'builtin',
+    enabled: true
+  },
+  {
+    name: 'createOrchestrationPlan',
+    description: 'Create and start a multi-step orchestration plan from an objective.',
+    source: 'builtin',
+    enabled: true
+  },
+  {
+    name: 'finalAnswer',
+    description: 'Provide the final answer to the user.',
+    source: 'builtin',
+    enabled: true
+  }
+];
+
+function createModelProvider() {
+  const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
+  if (gatewayApiKey) {
+    return createOpenAI({
+      apiKey: gatewayApiKey,
+      baseURL: process.env.AI_GATEWAY_BASE_URL || 'https://ai-gateway.vercel.sh/v1'
+    });
+  }
+
+  return createOpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+}
+
+const openai = createModelProvider();
 
 async function loadMcpTools(config: Record<string, unknown>): Promise<Record<string, any>> {
   const mcpServers = Array.isArray(config.mcpServers)
@@ -80,11 +143,91 @@ function getToolPolicy(config: Record<string, unknown>): ToolPolicy {
   };
 }
 
+function isToolEnabledByPolicy(toolName: string, policy: ToolPolicy): boolean {
+  if (policy.denyTools?.includes(toolName)) {
+    return false;
+  }
+
+  if (policy.allowTools && policy.allowTools.length > 0) {
+    return policy.allowTools.includes(toolName);
+  }
+
+  return true;
+}
+
+export async function getToolCatalog(agentId?: string): Promise<{
+  agentId?: string;
+  tools: ToolCatalogItem[];
+  policy: ToolPolicy;
+  mcpServers: Array<{ name: string; url?: string; transport?: string }>;
+}> {
+  if (!agentId) {
+    return {
+      tools: BUILTIN_TOOL_CATALOG,
+      policy: {
+        maxToolCallsPerTask: 40,
+        perToolTimeoutMs: 30_000
+      },
+      mcpServers: []
+    };
+  }
+
+  const agent = getAgent(agentId);
+  if (!agent) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+
+  const config = agent.config as Record<string, unknown>;
+  const policy = getToolPolicy(config);
+  const declaredServers = Array.isArray(config.mcpServers)
+    ? config.mcpServers
+      .filter((server): server is Record<string, unknown> => typeof server === 'object' && server !== null)
+      .map((server) => ({
+        name: typeof server.name === 'string' ? server.name : 'mcp-server',
+        url: typeof server.url === 'string' ? server.url : undefined,
+        transport: typeof server.transport === 'string' ? server.transport : undefined
+      }))
+    : [];
+
+  const mcpTools = await loadMcpTools(config);
+  const mcpCatalog: ToolCatalogItem[] = Object.entries(mcpTools).map(([name, definition]) => ({
+    name,
+    description: definition?.description ?? 'MCP tool',
+    source: 'mcp',
+    enabled: isToolEnabledByPolicy(name, policy)
+  }));
+
+  const builtinCatalog = BUILTIN_TOOL_CATALOG.map((tool) => ({
+    ...tool,
+    enabled: isToolEnabledByPolicy(tool.name, policy)
+  }));
+
+  return {
+    agentId: agent.id,
+    tools: [...builtinCatalog, ...mcpCatalog],
+    policy,
+    mcpServers: declaredServers
+  };
+}
+
 async function buildTools(
   task: Task,
   agentConfig: Record<string, unknown>,
   traceContext: Awaited<ReturnType<typeof createAgentTrace>> | null
 ): Promise<Record<string, any>> {
+  const emitToolEvent = (type: 'tool.call' | 'tool.result' | 'tool.error', payload: Record<string, unknown>): void => {
+    if (!task.runId || !task.conversationId) {
+      return;
+    }
+
+    appendRunEvent({
+      runId: task.runId,
+      conversationId: task.conversationId,
+      type,
+      payload
+    });
+  };
+
   const baseTools = {
     readSharedMemory: tool({
       description: 'Read a value from shared memory by key.',
@@ -185,6 +328,8 @@ async function buildTools(
           defaultAgentId: defaultAgentId ?? task.agentId,
           stepPrompts,
           maxSteps,
+          conversationId: task.conversationId,
+          runId: task.runId,
           metadata: {
             createdByTaskId: task.id,
             origin: 'createOrchestrationPlanTool'
@@ -212,7 +357,17 @@ async function buildTools(
   const merged = { ...baseTools, ...mcpTools };
   const policy = getToolPolicy(agentConfig);
 
-  return applyToolPolicies(task.id, merged, policy);
+  return applyToolPolicies(task.id, merged, policy, {
+    onToolStart: (toolName, input) => {
+      emitToolEvent('tool.call', { toolName, input });
+    },
+    onToolResult: (toolName, output) => {
+      emitToolEvent('tool.result', { toolName, output });
+    },
+    onToolError: (toolName, error) => {
+      emitToolEvent('tool.error', { toolName, error });
+    }
+  });
 }
 
 function extractFinalMessage(result: any): string {
@@ -237,6 +392,104 @@ function extractFinalMessage(result: any): string {
   return text;
 }
 
+function resolveDefaultModel(): string {
+  if (process.env.AI_GATEWAY_API_KEY) {
+    return process.env.DEFAULT_MODEL || 'gpt-4o-mini';
+  }
+
+  return process.env.DEFAULT_MODEL || 'gpt-4o-mini';
+}
+
+function resolveModelName(agentModel: unknown): string {
+  const configuredModel = typeof agentModel === 'string' ? agentModel : resolveDefaultModel();
+
+  if (!process.env.AI_GATEWAY_API_KEY && configuredModel === 'openai/o4-mini') {
+    return 'gpt-4o-mini';
+  }
+
+  return configuredModel;
+}
+
+function hasModelCredentials(): boolean {
+  return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.OPENAI_API_KEY);
+}
+
+function allowMockFallback(): boolean {
+  return process.env.MOCK_AGENT_FALLBACK !== 'false';
+}
+
+async function executeMockTask(task: Task): Promise<{
+  message: string;
+  finishReason: string;
+  metadata: Record<string, unknown>;
+}> {
+  const prompt = typeof task.data.prompt === 'string' ? task.data.prompt : JSON.stringify(task.data);
+  const normalizedPrompt = prompt.toLowerCase();
+  let toolCalls = 0;
+  let message = `Mock execution completed: ${prompt.slice(0, 200)}`;
+
+  const maybeMemoryKey = prompt.match(/key\\s+([a-zA-Z0-9._:-]+)/i)?.[1];
+  const greetingValue = 'Hello from the orchestrator demo.';
+
+  if (normalizedPrompt.includes('writesharedmemory') || normalizedPrompt.includes('shared memory')) {
+    const key = maybeMemoryKey ?? 'mock.default';
+
+    if (task.runId && task.conversationId) {
+      appendRunEvent({
+        runId: task.runId,
+        conversationId: task.conversationId,
+        type: 'tool.call',
+        payload: {
+          toolName: 'writeSharedMemory',
+          input: { key, value: greetingValue }
+        }
+      });
+    }
+
+    await setValue(key, greetingValue);
+    toolCalls += 1;
+
+    if (task.runId && task.conversationId) {
+      appendRunEvent({
+        runId: task.runId,
+        conversationId: task.conversationId,
+        type: 'tool.result',
+        payload: {
+          toolName: 'writeSharedMemory',
+          output: { status: 'success', message: `Saved to ${key}` }
+        }
+      });
+    }
+
+    message = `Stored greeting in shared memory at ${key}: ${greetingValue}`;
+  } else if (normalizedPrompt.includes('create') && normalizedPrompt.includes('plan')) {
+    const summary = await createAndStartPlan({
+      objective: prompt,
+      defaultAgentId: task.agentId,
+      conversationId: task.conversationId,
+      runId: task.runId,
+      metadata: {
+        createdByTaskId: task.id,
+        origin: 'mockExecution'
+      }
+    });
+
+    toolCalls += 1;
+    message = `Created plan ${summary.planId} with ${summary.totalSteps} steps.`;
+  }
+
+  return {
+    message,
+    finishReason: 'mock-fallback',
+    metadata: {
+      model: 'mock-agent',
+      steps: 1,
+      toolCalls,
+      mockFallback: true
+    }
+  };
+}
+
 /**
  * Execute an agent task using ToolLoopAgent for multi-step tool execution.
  */
@@ -252,11 +505,15 @@ export async function executeAgentTask(task: Task): Promise<any> {
     : "You are a helpful and expert AI assistant. Please complete the user's task to the best of your ability.";
 
   const temperature = typeof agent.config.temperature === 'number' ? agent.config.temperature : 0.7;
-  const modelName = typeof agent.config.model === 'string' ? agent.config.model : 'gpt-4o';
+  const modelName = resolveModelName(agent.config.model);
 
   const userPrompt = typeof task.data.prompt === 'string'
     ? task.data.prompt
     : JSON.stringify(task.data);
+
+  if (!hasModelCredentials() && allowMockFallback()) {
+    return executeMockTask(task);
+  }
 
   const traceEnabled = isTracingEnabled();
   let traceContext: Awaited<ReturnType<typeof createAgentTrace>> | null = null;
@@ -340,8 +597,25 @@ export async function streamAgentTask(task: Task): Promise<any> {
     : "You are a helpful and expert AI assistant. Please complete the user's task to the best of your ability.";
 
   const temperature = typeof agent.config.temperature === 'number' ? agent.config.temperature : 0.7;
-  const modelName = typeof agent.config.model === 'string' ? agent.config.model : 'gpt-4o';
+  const modelName = resolveModelName(agent.config.model);
   const userPrompt = typeof task.data.prompt === 'string' ? task.data.prompt : JSON.stringify(task.data);
+
+  if (!hasModelCredentials() && allowMockFallback()) {
+    const mock = await executeMockTask(task);
+    return {
+      text: mock.message,
+      finishReason: mock.finishReason,
+      steps: [
+        {
+          result: {
+            text: mock.message
+          }
+        }
+      ],
+      toolCalls: [],
+      metadata: mock.metadata
+    };
+  }
 
   const combinedTools = await buildTools(task, agent.config as Record<string, unknown>, null);
 
