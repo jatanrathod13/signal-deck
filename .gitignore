@@ -17,6 +17,9 @@ client/.env
 
 # Local tooling artifacts
 .playwright-mcp/
+.codex/
+e2e-artifacts/
+tmp-agents.png
 
 # Local agent/spec artifacts
 .claude/skills/
