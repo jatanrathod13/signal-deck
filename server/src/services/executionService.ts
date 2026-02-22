@@ -17,6 +17,7 @@ import {
 import { getMcpToolsForAgent, getMcpToolsFromServers } from './mcpClientService';
 import { createAgentTrace, formatTraceMetadata, isTracingEnabled } from './tracingService';
 import { applyToolPolicies, clearTaskToolBudget } from './toolPolicyService';
+import { createAndStartPlan } from './orchestratorService';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -156,6 +157,44 @@ async function buildTools(
       ) => {
         await setTieredValue(tier, key, value, ttl);
         return { status: 'success', message: `Saved to ${tier}:${key}` };
+      }
+    }),
+    createOrchestrationPlan: tool({
+      description: 'Create and start a multi-step orchestration plan from an objective.',
+      inputSchema: zodSchema(z.object({
+        objective: z.string().describe('High-level objective to execute through multiple steps.'),
+        defaultAgentId: z.string().optional().describe('Agent ID to run steps. Defaults to the current task agent.'),
+        stepPrompts: z.array(z.string()).optional().describe('Optional explicit prompts for each orchestration step.'),
+        maxSteps: z.number().int().min(2).max(10).optional().describe('Optional limit for auto-generated steps.')
+      })),
+      execute: async (
+        {
+          objective,
+          defaultAgentId,
+          stepPrompts,
+          maxSteps
+        }: {
+          objective: string;
+          defaultAgentId?: string;
+          stepPrompts?: string[];
+          maxSteps?: number;
+        }
+      ) => {
+        const summary = await createAndStartPlan({
+          objective,
+          defaultAgentId: defaultAgentId ?? task.agentId,
+          stepPrompts,
+          maxSteps,
+          metadata: {
+            createdByTaskId: task.id,
+            origin: 'createOrchestrationPlanTool'
+          }
+        });
+
+        return {
+          status: 'started',
+          ...summary
+        };
       }
     }),
     finalAnswer: tool({

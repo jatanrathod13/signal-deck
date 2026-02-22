@@ -12,25 +12,36 @@ const router = Router();
 interface CreatePlanBody {
   objective: string;
   defaultAgentId: string;
-  stepPrompts: string[];
+  stepPrompts?: string[];
+  autoGenerate?: boolean;
+  maxSteps?: number;
   metadata?: Record<string, unknown>;
 }
 
 router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => {
   try {
-    const { objective, defaultAgentId, stepPrompts, metadata } = req.body;
+    const { objective, defaultAgentId, stepPrompts, autoGenerate = false, maxSteps, metadata } = req.body;
 
-    if (!objective || !defaultAgentId || !Array.isArray(stepPrompts) || stepPrompts.length === 0) {
+    if (!objective || !defaultAgentId) {
       return res.status(400).json({
         success: false,
-        error: 'objective, defaultAgentId, and non-empty stepPrompts are required'
+        error: 'objective and defaultAgentId are required'
+      });
+    }
+
+    const hasManualSteps = Array.isArray(stepPrompts) && stepPrompts.length > 0;
+    if (!hasManualSteps && !autoGenerate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Provide non-empty stepPrompts or set autoGenerate=true'
       });
     }
 
     const summary = await createAndStartPlan({
       objective,
       defaultAgentId,
-      stepPrompts,
+      stepPrompts: hasManualSteps ? stepPrompts : undefined,
+      maxSteps,
       metadata
     });
 

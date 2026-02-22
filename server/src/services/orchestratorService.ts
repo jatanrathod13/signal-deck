@@ -7,6 +7,63 @@ import { Plan, OrchestrationSummary, Task } from '../../types';
 import { createPlan, getPlan, getReadySteps, updatePlanStatus, updateStepStatus } from './planService';
 import { submitTask, getTask, linkChildTask } from './taskQueueService';
 
+const DEFAULT_AUTO_PLAN_MAX_STEPS = 5;
+const MIN_AUTO_PLAN_STEPS = 2;
+const MAX_AUTO_PLAN_STEPS = 10;
+
+function clampStepCount(maxSteps?: number): number {
+  if (typeof maxSteps !== 'number' || Number.isNaN(maxSteps)) {
+    return DEFAULT_AUTO_PLAN_MAX_STEPS;
+  }
+
+  return Math.max(MIN_AUTO_PLAN_STEPS, Math.min(MAX_AUTO_PLAN_STEPS, Math.floor(maxSteps)));
+}
+
+function normalizePrompt(prompt: string): string {
+  return prompt
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Build practical step prompts from a natural-language objective.
+ * This keeps orchestration available even when callers do not provide explicit steps.
+ */
+export function generateStepPromptsFromObjective(objective: string, maxSteps?: number): string[] {
+  const sanitizedObjective = objective.trim();
+  const targetSteps = clampStepCount(maxSteps);
+
+  if (!sanitizedObjective) {
+    return [
+      'Clarify and restate the objective in concrete terms.',
+      'Define and execute the smallest set of actions to complete the objective.'
+    ];
+  }
+
+  const splitCandidates = sanitizedObjective
+    .split(/[.;\n]|(?:\s+and\s+)|(?:\s+then\s+)/i)
+    .map((value) => normalizePrompt(value))
+    .filter((value) => value.length > 0);
+
+  const uniqueCandidates = Array.from(new Set(splitCandidates));
+
+  if (uniqueCandidates.length >= MIN_AUTO_PLAN_STEPS) {
+    return uniqueCandidates
+      .slice(0, targetSteps)
+      .map((candidate, index) => `Complete part ${index + 1}: ${candidate}`);
+  }
+
+  const genericPlan = [
+    `Analyze the objective and constraints: ${sanitizedObjective}`,
+    `Design an execution approach for: ${sanitizedObjective}`,
+    `Implement the core work needed to achieve: ${sanitizedObjective}`,
+    `Validate outputs and quality against the objective: ${sanitizedObjective}`,
+    `Summarize results, risks, and any follow-up actions for: ${sanitizedObjective}`
+  ];
+
+  return genericPlan.slice(0, targetSteps);
+}
+
 function createSimpleStepPlan(
   objective: string,
   defaultAgentId: string,
@@ -35,10 +92,21 @@ function createSimpleStepPlan(
 export async function createAndStartPlan(input: {
   objective: string;
   defaultAgentId: string;
-  stepPrompts: string[];
+  stepPrompts?: string[];
+  maxSteps?: number;
   metadata?: Record<string, unknown>;
 }): Promise<OrchestrationSummary> {
-  const steps = createSimpleStepPlan(input.objective, input.defaultAgentId, input.stepPrompts);
+  const prompts = input.stepPrompts && input.stepPrompts.length > 0
+    ? input.stepPrompts
+      .map((stepPrompt) => normalizePrompt(stepPrompt))
+      .filter((stepPrompt) => stepPrompt.length > 0)
+    : generateStepPromptsFromObjective(input.objective, input.maxSteps);
+
+  if (prompts.length === 0) {
+    throw new Error('Unable to create a plan without at least one valid step prompt');
+  }
+
+  const steps = createSimpleStepPlan(input.objective, input.defaultAgentId, prompts);
   const plan = await createPlan({
     objective: input.objective,
     metadata: input.metadata,

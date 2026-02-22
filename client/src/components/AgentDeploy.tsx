@@ -3,11 +3,10 @@
  * Form for deploying new agents
  */
 import { useState } from 'react';
-import { Plus, AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Plus } from 'lucide-react';
 import { useDeployAgent } from '../hooks/useAgents';
 import { cn } from '../lib/utils';
 
-// Common agent types
 const agentTypes = [
   { value: 'worker', label: 'Worker Agent' },
   { value: 'coordinator', label: 'Coordinator Agent' },
@@ -43,11 +42,9 @@ export function AgentDeploy({ className, onSuccess }: AgentDeployProps) {
 
   const deployAgent = useDeployAgent();
 
-  // Validate form data
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    // Validate name
     if (!formData.name.trim()) {
       newErrors.name = 'Agent name is required';
     } else if (formData.name.length < 2) {
@@ -56,12 +53,10 @@ export function AgentDeploy({ className, onSuccess }: AgentDeployProps) {
       newErrors.name = 'Agent name must be less than 50 characters';
     }
 
-    // Validate type
     if (!formData.type) {
       newErrors.type = 'Agent type is required';
     }
 
-    // Validate config JSON
     try {
       JSON.parse(formData.config);
     } catch {
@@ -88,16 +83,9 @@ export function AgentDeploy({ className, onSuccess }: AgentDeployProps) {
         config: parsedConfig,
       });
 
-      // Reset form on success
-      setFormData({
-        name: '',
-        type: '',
-        config: '{}',
-      });
+      setFormData({ name: '', type: '', config: '{}' });
       setSubmitSuccess(true);
       onSuccess?.();
-
-      // Clear success message after 3 seconds
       setTimeout(() => setSubmitSuccess(false), 3000);
     } catch (error) {
       console.error('Failed to deploy agent:', error);
@@ -110,7 +98,6 @@ export function AgentDeploy({ className, onSuccess }: AgentDeployProps) {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
 
-    // Clear error when user types
     if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -119,168 +106,103 @@ export function AgentDeploy({ className, onSuccess }: AgentDeployProps) {
   const isSubmitting = deployAgent.isPending;
 
   return (
-    <div className={cn(
-      'bg-[#1e1e1e] rounded-lg border border-[#2a2a2a] p-6 carbon-overlay card-reveal speed-lines',
-      'hover:border-[#ff2800]/40 transition-all duration-300',
-      className
-    )}>
-      {/* Racing stripe accent */}
-      <div className="h-0.5 bg-gradient-to-r from-[#ff2800] via-[#ffcc00] to-[#ff2800] rounded-full mb-4 opacity-60" />
-
-      <div className="flex items-center gap-2 mb-4">
-        <Plus className="w-5 h-5 text-[#ff2800]" />
-        <h2 className="text-lg font-semibold text-white">Deploy New Driver</h2>
+    <section className={cn('glass-panel p-5 sm:p-6', className)}>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="kicker">Provisioning</p>
+          <h2 className="panel-title">Deploy Agent</h2>
+        </div>
+        <div className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-2">
+          <Plus className="h-4 w-4 text-cyan-200" />
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Success Message */}
         {submitSuccess && (
-          <div className="flex items-center gap-2 p-3 bg-green-900/20 border border-green-700/40 rounded-md glow-green">
-            <CheckCircle className="w-5 h-5 text-green-400" />
-            <span className="text-sm text-green-400 font-medium">
-              Agent deployed successfully!
-            </span>
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3 text-sm text-emerald-100">
+            <CheckCircle className="h-4 w-4" />
+            Agent deployed successfully
           </div>
         )}
 
-        {/* Error Message */}
         {deployAgent.isError && (
-          <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-700/40 rounded-md glow-red">
-            <AlertCircle className="w-5 h-5 text-red-400" />
-            <span className="text-sm text-red-400 font-medium">
-              {deployAgent.error?.message || 'Failed to deploy agent'}
-            </span>
+          <div className="flex items-center gap-2 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm text-rose-100">
+            <AlertCircle className="h-4 w-4" />
+            {deployAgent.error?.message || 'Failed to deploy agent'}
           </div>
         )}
 
-        {/* Name Field */}
-        <div>
-          <label
-            htmlFor="name"
-            className="block text-sm font-medium text-gray-400 mb-1"
-          >
-            Driver Name <span className="text-[#ff2800]">*</span>
-          </label>
-          <input
-            type="text"
-            id="name"
-            name="name"
-            value={formData.name}
-            onChange={handleInputChange}
-            placeholder="my-agent"
-            disabled={isSubmitting}
-            className={cn(
-              'w-full px-3 py-2 border rounded-md text-sm bg-[#0a0a0a] text-white',
-              'focus:outline-none focus:ring-2 focus:ring-[#ff2800] focus:border-transparent',
-              'disabled:bg-[#1a1a1a] disabled:cursor-not-allowed',
-              'placeholder:text-gray-600',
-              errors.name
-                ? 'border-red-500 text-red-400 placeholder-red-300 focus:ring-red-500'
-                : 'border-[#2a2a2a]'
-            )}
-          />
-          {errors.name && (
-            <p className="mt-1 text-xs text-red-400">{errors.name}</p>
-          )}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor="name" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Name
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              placeholder="research-agent"
+              disabled={isSubmitting}
+              className={cn('input-field', errors.name && 'border-rose-400/60 text-rose-100')}
+            />
+            {errors.name && <p className="mt-1 text-xs text-rose-300">{errors.name}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="type" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+              Type
+            </label>
+            <select
+              id="type"
+              name="type"
+              value={formData.type}
+              onChange={handleInputChange}
+              disabled={isSubmitting}
+              className={cn('input-field', errors.type && 'border-rose-400/60 text-rose-100')}
+            >
+              <option value="">Select agent type</option>
+              {agentTypes.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+            {errors.type && <p className="mt-1 text-xs text-rose-300">{errors.type}</p>}
+          </div>
         </div>
 
-        {/* Type Field */}
         <div>
-          <label
-            htmlFor="type"
-            className="block text-sm font-medium text-gray-400 mb-1"
-          >
-            Agent Type <span className="text-[#ff2800]">*</span>
-          </label>
-          <select
-            id="type"
-            name="type"
-            value={formData.type}
-            onChange={handleInputChange}
-            disabled={isSubmitting}
-            className={cn(
-              'w-full px-3 py-2 border rounded-md text-sm bg-[#0a0a0a] text-white',
-              'focus:outline-none focus:ring-2 focus:ring-[#ff2800] focus:border-transparent',
-              'disabled:bg-[#1a1a1a] disabled:cursor-not-allowed',
-              errors.type
-                ? 'border-red-500 text-red-400 focus:ring-red-500'
-                : 'border-[#2a2a2a]'
-            )}
-          >
-            <option value="">Select agent type</option>
-            {agentTypes.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-          {errors.type && (
-            <p className="mt-1 text-xs text-red-400">{errors.type}</p>
-          )}
-        </div>
-
-        {/* Config Field */}
-        <div>
-          <label
-            htmlFor="config"
-            className="block text-sm font-medium text-gray-400 mb-1"
-          >
-            Configuration (JSON)
+          <label htmlFor="config" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+            Configuration JSON
           </label>
           <textarea
             id="config"
             name="config"
             value={formData.config}
             onChange={handleInputChange}
-            placeholder='{"key": "value"}'
+            placeholder='{"model":"gpt-4.1"}'
             rows={4}
             disabled={isSubmitting}
-            className={cn(
-              'w-full px-3 py-2 border rounded-md text-sm font-mono bg-[#0a0a0a] text-white',
-              'focus:outline-none focus:ring-2 focus:ring-[#ff2800] focus:border-transparent',
-              'disabled:bg-[#1a1a1a] disabled:cursor-not-allowed',
-              'placeholder:text-gray-600',
-              errors.config
-                ? 'border-red-500 text-red-400 placeholder-red-300 focus:ring-red-500'
-                : 'border-[#2a2a2a]'
-            )}
+            className={cn('input-field font-mono text-sm', errors.config && 'border-rose-400/60 text-rose-100')}
           />
-          {errors.config && (
-            <p className="mt-1 text-xs text-red-400">{errors.config}</p>
-          )}
-          <p className="mt-1 text-xs text-gray-500">
-            Optional. Enter valid JSON configuration for the agent.
-          </p>
+          {errors.config && <p className="mt-1 text-xs text-rose-300">{errors.config}</p>}
         </div>
 
-        {/* Submit Button */}
         <button
           type="submit"
           disabled={isSubmitting}
           className={cn(
-            'w-full flex items-center justify-center gap-2 px-4 py-2',
-            'bg-gradient-to-r from-[#ff2800] to-[#cc2000] text-white rounded-md text-sm font-semibold',
-            'hover:from-[#ff4000] hover:to-[#ff2800]',
-            'focus:outline-none focus:ring-2 focus:ring-[#ff2800] focus:ring-offset-2 focus:ring-offset-[#0a0a0a]',
-            'disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed',
-            'transition-all duration-200',
-            'btn-ferrari btn-ferrari-primary glow-red'
+            'btn-primary inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all',
+            isSubmitting && 'cursor-not-allowed opacity-60'
           )}
         >
-          {isSubmitting ? (
-            <>
-              <div className="tachometer-spinner w-4 h-4" />
-              Deploying...
-            </>
-          ) : (
-            <>
-              <Plus className="w-4 h-4" />
-              Deploy Agent
-            </>
-          )}
+          <Plus className="h-4 w-4" />
+          {isSubmitting ? 'Deploying...' : 'Deploy Agent'}
         </button>
       </form>
-    </div>
+    </section>
   );
 }
 

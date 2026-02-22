@@ -9,7 +9,7 @@ import { Task, TaskErrorType, TaskStatus } from '../types';
 import { getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
-import { handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
+import { createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
 import { incrementMetric } from '../src/services/metricsService';
 
 // Redis connection for BullMQ worker
@@ -107,7 +107,9 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
       throw new Error('Task not found during processing');
     }
 
-    const resultData = await executeAgentTask(currentTask);
+    const resultData = currentTask.type === 'orchestrate'
+      ? await runOrchestrationTask(currentTask)
+      : await executeAgentTask(currentTask);
 
     const completedTask = updateTaskStatus(taskId, 'completed', {
       result: resultData
@@ -137,6 +139,56 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
 
     throw error;
   }
+}
+
+interface OrchestrationTaskData {
+  objective?: unknown;
+  defaultAgentId?: unknown;
+  stepPrompts?: unknown;
+  maxSteps?: unknown;
+  metadata?: unknown;
+}
+
+async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>> {
+  const taskData = task.data as OrchestrationTaskData;
+
+  const objective = typeof taskData.objective === 'string'
+    ? taskData.objective.trim()
+    : '';
+
+  if (!objective) {
+    throw new Error('orchestrate task requires a non-empty objective');
+  }
+
+  const defaultAgentId = typeof taskData.defaultAgentId === 'string'
+    ? taskData.defaultAgentId
+    : task.agentId;
+
+  const stepPrompts = Array.isArray(taskData.stepPrompts)
+    ? taskData.stepPrompts.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : undefined;
+
+  const maxSteps = typeof taskData.maxSteps === 'number' ? taskData.maxSteps : undefined;
+  const metadata = typeof taskData.metadata === 'object' && taskData.metadata !== null
+    ? taskData.metadata as Record<string, unknown>
+    : undefined;
+
+  const summary = await createAndStartPlan({
+    objective,
+    defaultAgentId,
+    stepPrompts,
+    maxSteps,
+    metadata: {
+      ...(metadata ?? {}),
+      parentTaskId: task.id
+    }
+  });
+
+  return {
+    mode: 'orchestrate',
+    objective,
+    ...summary
+  };
 }
 
 /**
