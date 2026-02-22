@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "wt:new": "bash ./scripts/new-worktree.sh",
+    "wt:cleanup": "bash ./scripts/cleanup-worktree.sh"
+  },
   "devDependencies": {
     "socket.io-client": "^4.8.3"
   }

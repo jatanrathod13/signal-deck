@@ -1,14 +1,16 @@
 /**
  * TaskWorker - BullMQ Worker for processing tasks from the queue
- * Handles task execution, status updates, and socket event emission
+ * Handles task execution, status updates, orchestration hooks, and socket emissions.
  */
 
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
-import { Task, TaskStatus } from '../types';
-import { getTask } from '../src/services/taskQueueService';
+import { Task, TaskErrorType, TaskStatus } from '../types';
+import { getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
+import { handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
+import { incrementMetric } from '../src/services/metricsService';
 
 // Redis connection for BullMQ worker
 let redisConnection: Redis | null = null;
@@ -26,8 +28,8 @@ function getRedisConnection(): Redis {
   if (!redisConnection) {
     redisConnection = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      maxRetriesPerRequest: null, // Required for BullMQ
+      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      maxRetriesPerRequest: null,
       lazyConnect: true
     });
   }
@@ -42,35 +44,39 @@ export function setRedisConnection(connection: Redis): void {
 }
 
 /**
- * Update task status in the task store
+ * Resolve error type for normalized failure analytics.
  */
-function updateTaskStatus(taskId: string, status: TaskStatus, additionalUpdates?: Partial<Task>): Task | undefined {
-  const task = getTask(taskId);
-  if (!task) {
-    console.warn(`Task not found for update: ${taskId}`);
-    return undefined;
+function resolveErrorType(error: unknown): TaskErrorType {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (message.includes('timeout')) return 'timeout';
+  if (message.includes('tool')) return 'tool_error';
+  if (message.includes('validation')) return 'validation_error';
+  if (message.includes('model')) return 'model_error';
+  return 'unknown_error';
+}
+
+/**
+ * Check task dependencies.
+ */
+function hasIncompleteDependencies(task: Task): boolean {
+  if (!task.dependsOnTaskIds || task.dependsOnTaskIds.length === 0) {
+    return false;
   }
 
-  task.status = status;
-  task.updatedAt = new Date();
-
-  if (additionalUpdates) {
-    Object.assign(task, additionalUpdates);
-  }
-
-  return task;
+  return task.dependsOnTaskIds.some((dependencyId) => {
+    const dependencyTask = getTask(dependencyId);
+    return !dependencyTask || dependencyTask.status !== 'completed';
+  });
 }
 
 /**
  * Process a task job
- * This is the main processor function for the BullMQ worker
  */
 async function processTaskJob(job: Job): Promise<{ result: string }> {
-  const { taskId, agentId, data } = job.data;
+  const { taskId, agentId } = job.data;
 
   console.log(`Processing job ${job.id} for task ${taskId} (agent: ${agentId})`);
 
-  // Check if task was cancelled before processing
   const task = getTask(taskId);
   if (!task) {
     console.log(`Task ${taskId} not found, skipping`);
@@ -82,56 +88,59 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
     return { result: 'skipped' };
   }
 
-  // Update task status to processing
-  updateTaskStatus(taskId, 'processing');
-  emitTaskStatus(task);
+  if (hasIncompleteDependencies(task)) {
+    const blockedTask = updateTaskStatus(taskId, 'blocked');
+    if (blockedTask) {
+      emitTaskStatus(blockedTask);
+    }
+    return { result: 'blocked' };
+  }
+
+  const processingTask = updateTaskStatus(taskId, 'processing');
+  if (processingTask) {
+    emitTaskStatus(processingTask);
+  }
 
   try {
-    // Simulate task processing
-    // In a real implementation, this would call the agent to execute the task
-    console.log(`Executing task ${taskId} with data:`, data);
-
-    const taskData = getTask(taskId);
-    if (!taskData) {
+    const currentTask = getTask(taskId);
+    if (!currentTask) {
       throw new Error('Task not found during processing');
     }
 
-    // Call actual AI execution logic
-    const resultData = await executeAgentTask(taskData);
+    const resultData = await executeAgentTask(currentTask);
 
-    // Mark task as completed
     const completedTask = updateTaskStatus(taskId, 'completed', {
       result: resultData
     });
 
     if (completedTask) {
       emitTaskCompleted(completedTask);
+      incrementMetric('tasksCompleted');
+      await handleTaskCompletion(completedTask);
     }
 
     console.log(`Task ${taskId} completed successfully`);
     return { result: 'completed' };
-
   } catch (error) {
-    // Mark task as failed
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorType = resolveErrorType(error);
+
     console.error(`Task ${taskId} failed:`, errorMessage);
 
-    const failedTask = updateTaskStatus(taskId, 'failed', {
-      error: errorMessage
-    });
+    const failedTask = markTaskFailure(taskId, errorMessage, errorType);
 
     if (failedTask) {
       emitTaskStatus(failedTask);
+      incrementMetric('tasksFailed');
+      await handleTaskFailure(failedTask);
     }
 
-    // Re-throw to let BullMQ handle retry logic
     throw error;
   }
 }
 
 /**
  * Start the BullMQ worker
- * Exports: startWorker(): void
  */
 export function startWorker(): void {
   if (taskWorker) {
@@ -160,7 +169,6 @@ export function startWorker(): void {
     }
   );
 
-  // Worker event handlers
   taskWorker.on('completed', (job) => {
     console.log(`Job ${job.id} completed`);
   });
@@ -179,7 +187,6 @@ export function startWorker(): void {
 
 /**
  * Stop the BullMQ worker
- * Exports: stopWorker(): Promise<void>
  */
 export async function stopWorker(): Promise<void> {
   if (taskWorker) {
@@ -201,7 +208,6 @@ export function getWorker(): Worker | null {
   return taskWorker;
 }
 
-// Allow worker to be started when run directly
 if (require.main === module) {
   startWorker();
 }
