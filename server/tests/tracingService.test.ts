@@ -188,9 +188,19 @@ describe('TracingService', () => {
       expect(metadata.traceUrl).toBe('https://smith.langchain.com/projects/test/runs/abc123');
       expect(metadata.runId).toBe('run-123');
       expect(metadata.tokens).toEqual({ prompt: 100, completion: 200, total: 300 });
-      expect(metadata.latency).toEqual({ ms: 5000 });
+      expect(metadata.latency).toEqual({
+        ms: 5000,
+        perTool: {
+          tool1: 100,
+          tool2: 100
+        }
+      });
       expect(metadata.cost).toEqual({ usd: 0.0025 });
       expect(metadata.toolCalls).toBe(2);
+      expect(metadata.toolCallDetails).toEqual([
+        { name: 'tool1', durationMs: 100 },
+        { name: 'tool2', durationMs: 100 }
+      ]);
     });
 
     it('should handle missing optional fields', () => {

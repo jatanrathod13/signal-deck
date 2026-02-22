@@ -1,6 +1,7 @@
 /**
  * Conversation Routes
  * Chat-first API for conversation threads and run timeline events.
+ * Updated with executionProfile + research config support (WP-03/WP-05).
  */
 
 import { Router, Request, Response } from 'express';
@@ -18,7 +19,7 @@ import {
 } from '../services/conversationService';
 import { listAgents } from '../services/agentService';
 import { submitTask } from '../services/taskQueueService';
-import { Task } from '../../types';
+import { Task, getFeatureFlags } from '../../types';
 
 const router = Router();
 
@@ -31,6 +32,15 @@ const createMessageSchema = z.object({
   content: z.string().min(1),
   agentId: z.string().min(1).optional(),
   taskType: z.string().min(1).optional(),
+  // New: execution profile support
+  executionProfile: z.enum(['standard', 'deep_research']).optional(),
+  // New: research configuration
+  research: z.object({
+    depth: z.enum(['quick', 'standard', 'deep']),
+    parallelism: z.number().int().min(1).max(10).optional(),
+    requireCitations: z.boolean().optional(),
+    maxSources: z.number().int().min(1).max(50).optional()
+  }).optional(),
   metadata: z.record(z.string(), z.unknown()).optional()
 });
 
@@ -137,6 +147,16 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
     });
   }
 
+  // Check feature flags for deep research
+  const flags = getFeatureFlags();
+  const executionProfile = parsed.data.executionProfile ?? 'standard';
+  if (executionProfile === 'deep_research' && !flags.FEATURE_DEEP_RESEARCH) {
+    return res.status(400).json({
+      success: false,
+      error: 'Deep research mode is not enabled. Set FEATURE_DEEP_RESEARCH=true to enable.'
+    });
+  }
+
   try {
     const userMessage = addConversationMessage({
       conversationId: conversation.id,
@@ -149,6 +169,8 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
       conversationId: conversation.id,
       metadata: {
         source: 'conversation-message',
+        executionProfile,
+        research: parsed.data.research,
         ...(parsed.data.metadata ?? {})
       }
     });
@@ -159,7 +181,8 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
       type: 'run.started',
       payload: {
         messageId: userMessage.id,
-        agentId: defaultAgentId
+        agentId: defaultAgentId,
+        executionProfile
       }
     });
 
@@ -182,7 +205,10 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
       data: {
         prompt: parsed.data.content,
         conversationId: conversation.id,
-        runId: run.id
+        runId: run.id,
+        // Pass execution profile and research config through task data
+        executionProfile,
+        research: parsed.data.research
       },
       status: 'pending',
       priority: 1,
@@ -193,6 +219,7 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
       metadata: {
         source: 'conversation',
         messageId: userMessage.id,
+        executionProfile,
         ...(parsed.data.metadata ?? {})
       }
     };
@@ -208,7 +235,8 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
       data: {
         message: userMessage,
         run: updatedRun,
-        taskId
+        taskId,
+        executionProfile
       }
     });
   } catch (error) {

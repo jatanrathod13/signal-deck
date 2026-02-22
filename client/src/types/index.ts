@@ -3,10 +3,30 @@
  * TypeScript interfaces mirroring server types
  */
 
-// Agent status types
+// ============================================
+// Execution & Research Profiles
+// ============================================
+export type ExecutionProfile = 'standard' | 'deep_research';
+export type ResearchDepth = 'quick' | 'standard' | 'deep';
+
+// ============================================
+// Feature Flags
+// ============================================
+export interface FeatureFlags {
+  FEATURE_DEEP_RESEARCH: boolean;
+  FEATURE_MCP_SDK_CLIENT: boolean;
+  FEATURE_PROVIDER_TOOLS: boolean;
+  FEATURE_EVALUATOR_LOOP: boolean;
+  FEATURE_APPROVAL_GATES: boolean;
+  FEATURE_RUN_INTELLIGENCE_UI: boolean;
+  FEATURE_RESUMABLE_STREAM_TRANSPORT: boolean;
+}
+
+// ============================================
+// Agent Types
+// ============================================
 export type AgentStatus = 'registered' | 'starting' | 'running' | 'idle' | 'error' | 'stopped';
 
-// Task status types
 export type TaskStatus = 'pending' | 'blocked' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type TaskErrorType = 'tool_error' | 'model_error' | 'timeout' | 'validation_error' | 'unknown_error';
 export type TaskExecutionMode = 'tool_loop' | 'claude_cli';
@@ -27,7 +47,132 @@ export type RunEventType =
   | 'tool.result'
   | 'tool.error'
   | 'plan.created'
-  | 'plan.step.status';
+  | 'plan.step.status'
+  // New: Deep Research events
+  | 'research.finding'
+  | 'research.source'
+  // New: Model routing events
+  | 'model.route.selected'
+  // New: Evaluation events
+  | 'evaluation.completed'
+  // New: Approval / governance events
+  | 'approval.requested'
+  | 'approval.resolved'
+  // New: Stream transport events
+  | 'stream.resumed';
+
+// ============================================
+// Research Types
+// ============================================
+export interface ResearchConfig {
+  depth: ResearchDepth;
+  parallelism?: number;
+  requireCitations?: boolean;
+  maxSources?: number;
+}
+
+export interface ResearchSource {
+  id: string;
+  url?: string;
+  title: string;
+  snippet: string;
+  confidence: number;
+  retrievedAt: Date;
+}
+
+export interface ResearchFinding {
+  id: string;
+  claim: string;
+  sources: string[];
+  confidence: number;
+  crossChecked: boolean;
+}
+
+// ============================================
+// Evaluation Types
+// ============================================
+export interface EvaluatorResult {
+  score: number;
+  criteria: Record<string, number>;
+  feedback: string;
+  passed: boolean;
+  revisedContent?: string;
+  evaluatedAt: Date;
+}
+
+// ============================================
+// Approval Types
+// ============================================
+export type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'timed_out';
+
+export interface ApprovalRequest {
+  id: string;
+  runId: string;
+  toolName: string;
+  reason: string;
+  input: Record<string, unknown>;
+  status: ApprovalStatus;
+  requestedAt: Date;
+  resolvedAt?: Date;
+  resolvedBy?: string;
+}
+
+// ============================================
+// Route Decision
+// ============================================
+export interface RouteDecision {
+  stepId?: string;
+  selectedModel: string;
+  reason: string;
+  taskClass?: string;
+  decidedAt: Date;
+}
+
+// ============================================
+// Run Artifacts & Intelligence
+// ============================================
+export interface RunArtifacts {
+  sources?: ResearchSource[];
+  findings?: ResearchFinding[];
+  evaluatorResult?: EvaluatorResult;
+  approvals?: ApprovalRequest[];
+  routeDecisions?: RouteDecision[];
+  citationMap?: Record<string, string[]>;
+  confidenceSummary?: {
+    overall: number;
+    perFinding: Record<string, number>;
+  };
+}
+
+export interface RunPhase {
+  name: string;
+  startedAt: Date;
+  endedAt?: Date;
+  durationMs?: number;
+  eventCount: number;
+  status: 'running' | 'completed' | 'failed';
+}
+
+export interface RunIntelligence {
+  runId: string;
+  phases: RunPhase[];
+  bottleneck?: {
+    phaseName: string;
+    durationMs: number;
+    reason: string;
+  };
+  toolFailureSummary: Array<{
+    toolName: string;
+    errorCount: number;
+    lastError: string;
+  }>;
+  routeSummary: RouteDecision[];
+  totalDurationMs: number;
+}
+
+// ============================================
+// Core Model Interfaces
+// ============================================
 
 // Agent interface
 export interface Agent {
@@ -112,6 +257,8 @@ export interface Run {
   endedAt?: Date;
   summary?: string;
   error?: string;
+  executionProfile?: ExecutionProfile;
+  artifacts?: RunArtifacts;
   metadata?: Record<string, unknown>;
 }
 
@@ -158,11 +305,13 @@ export interface SharedMemoryValue {
   value: unknown;
   createdAt: Date;
   updatedAt: Date;
-  ttl?: number; // TTL in seconds
-  expiresAt?: Date; // Calculated expiration time
+  ttl?: number;
+  expiresAt?: Date;
 }
 
-// WebSocket event payloads
+// ============================================
+// WebSocket Event Payloads
+// ============================================
 export interface AgentStatusEvent {
   agentId: string;
   status: AgentStatus;

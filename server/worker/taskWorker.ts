@@ -5,13 +5,13 @@
 
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
-import { OrchestrationExecutionStrategy, Task, TaskErrorType, TaskExecutionMode, TaskStatus } from '../types';
+import { OrchestrationExecutionStrategy, RunArtifacts, Task, TaskErrorType, TaskExecutionMode, TaskStatus } from '../types';
 import { enqueueTaskById, getAllTasks, getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
 import { createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
 import { incrementMetric } from '../src/services/metricsService';
-import { addConversationMessage, appendRunEvent, updateRun } from '../src/services/conversationService';
+import { addConversationMessage, appendRunEvent, getRun, updateRun } from '../src/services/conversationService';
 
 // Redis connection for BullMQ worker
 let redisConnection: Redis | null = null;
@@ -232,8 +232,41 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
         }
 
         if (!completedTask.parentTaskId && !completedTask.planId) {
+          const resultMetadata = (
+            completedTask.result &&
+            typeof completedTask.result === 'object' &&
+            typeof (completedTask.result as { metadata?: unknown }).metadata === 'object' &&
+            (completedTask.result as { metadata?: unknown }).metadata !== null
+          )
+            ? { ...((completedTask.result as { metadata: Record<string, unknown> }).metadata) }
+            : {};
+
+          const executionProfile = resultMetadata.executionProfile === 'deep_research'
+            ? 'deep_research'
+            : resultMetadata.executionProfile === 'standard'
+              ? 'standard'
+              : undefined;
+
+          const artifacts = (
+            typeof resultMetadata.artifacts === 'object' &&
+            resultMetadata.artifacts !== null
+          )
+            ? resultMetadata.artifacts as RunArtifacts
+            : undefined;
+
+          delete resultMetadata.executionProfile;
+          delete resultMetadata.artifacts;
+
+          const existingMetadata = getRun(completedTask.runId)?.metadata ?? {};
+
           updateRun(completedTask.runId, 'completed', {
-            summary: summaryMessage
+            summary: summaryMessage,
+            executionProfile,
+            artifacts,
+            metadata: {
+              ...existingMetadata,
+              ...resultMetadata
+            }
           });
 
           appendRunEvent({

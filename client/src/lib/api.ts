@@ -1,16 +1,23 @@
 /**
  * Agent Orchestration Platform - API Client
  * HTTP client for REST API calls
+ * Updated with executionProfile, research config, run intelligence,
+ * run artifacts, and approval endpoints.
  */
 
 import type {
   Agent,
   Conversation,
   ConversationMessage,
+  ExecutionProfile,
   OrchestrationExecutionStrategy,
   Plan,
+  ResearchConfig,
   Run,
+  RunArtifacts,
   RunEvent,
+  RunIntelligence,
+  ApprovalRequest,
   SharedMemoryValue,
   Task,
   TaskExecutionMode
@@ -270,6 +277,10 @@ export interface SubmitConversationMessageData {
   content: string;
   agentId?: string;
   taskType?: string;
+  // New: execution profile support
+  executionProfile?: ExecutionProfile;
+  // New: research configuration
+  research?: ResearchConfig;
   metadata?: Record<string, unknown>;
 }
 
@@ -277,6 +288,7 @@ export interface SubmitConversationMessageResult {
   message: ConversationMessage;
   run?: Run;
   taskId: string;
+  executionProfile?: ExecutionProfile;
 }
 
 export interface RunDetail {
@@ -322,6 +334,37 @@ export async function getRun(runId: string): Promise<RunDetail> {
 }
 
 // ============================================
+// Run Intelligence API Functions (WP-10)
+// ============================================
+
+export async function getRunIntelligence(runId: string): Promise<RunIntelligence> {
+  return fetchApi<RunIntelligence>(`/api/runs/${encodeURIComponent(runId)}/intelligence`);
+}
+
+export async function getRunArtifacts(runId: string): Promise<RunArtifacts & { approvals: ApprovalRequest[] }> {
+  return fetchApi<RunArtifacts & { approvals: ApprovalRequest[] }>(`/api/runs/${encodeURIComponent(runId)}/artifacts`);
+}
+
+// ============================================
+// Approval API Functions (WP-09)
+// ============================================
+
+export async function resolveApproval(
+  runId: string,
+  approvalId: string,
+  decision: 'approved' | 'denied',
+  resolvedBy?: string
+): Promise<ApprovalRequest> {
+  return fetchApi<ApprovalRequest>(
+    `/api/runs/${encodeURIComponent(runId)}/approvals/${encodeURIComponent(approvalId)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ decision, resolvedBy })
+    }
+  );
+}
+
+// ============================================
 // Metrics API Functions
 // ============================================
 
@@ -349,8 +392,10 @@ export async function getMetrics(): Promise<MetricsSnapshot> {
 export interface ToolCatalogItem {
   name: string;
   description: string;
-  source: 'builtin' | 'mcp';
+  source: 'builtin' | 'mcp' | 'provider';
   enabled: boolean;
+  policyStatus?: 'allowed' | 'denied';
+  policyReason?: string;
 }
 
 export interface ToolCatalogResponse {
@@ -363,6 +408,10 @@ export interface ToolCatalogResponse {
     perToolTimeoutMs?: number;
   };
   mcpServers: Array<{ name: string; url?: string; transport?: string }>;
+  featureFlags?: {
+    providerTools: boolean;
+    mcpSdkClient: boolean;
+  };
 }
 
 export interface SystemHealthResponse {

@@ -1,20 +1,45 @@
 /**
  * Tool Routes
- * Exposes configured tool catalog and policy visibility.
+ * Exposes configured tool catalog, policy visibility, and provider tool capabilities.
+ * Implements WP-07: Provider-native tools in catalog and policy.
  */
 
 import { Router, Request, Response } from 'express';
 import { getToolCatalog } from '../services/executionService';
+import { getFeatureFlags } from '../../types';
 
 const router = Router();
 
 router.get('/catalog', async (req: Request<{}, {}, {}, { agentId?: string }>, res: Response) => {
   try {
     const catalog = await getToolCatalog(req.query.agentId);
+    const flags = getFeatureFlags();
+
+    // Enhance catalog items with provider tool capabilities
+    const enhancedTools = catalog.tools.map((tool) => {
+      const isProviderTool = tool.source === 'provider';
+      return {
+        ...tool,
+        // WP-07: Include policy status and reason for disabled tools
+        policyStatus: tool.enabled ? 'allowed' : 'denied',
+        policyReason: tool.enabled
+          ? undefined
+          : `Tool ${tool.name} is denied by ${isProviderTool ? 'provider tool' : 'agent'} policy`,
+        // Provider tools flag availability
+        providerToolsEnabled: flags.FEATURE_PROVIDER_TOOLS
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      data: catalog
+      data: {
+        ...catalog,
+        tools: enhancedTools,
+        featureFlags: {
+          providerTools: flags.FEATURE_PROVIDER_TOOLS,
+          mcpSdkClient: flags.FEATURE_MCP_SDK_CLIENT
+        }
+      }
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes('not found')) {

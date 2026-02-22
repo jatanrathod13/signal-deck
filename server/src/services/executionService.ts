@@ -1,13 +1,24 @@
 /**
  * ExecutionService - Handles LLM interactions and tool-loop execution.
- * Adds tool governance, memory tier access, and trace/metrics integration.
+ * Adds tool governance, memory tier access, trace/metrics integration,
+ * model routing (WP-02), evaluator loop (WP-08), deep research (WP-04),
+ * and governance approvals (WP-09).
  */
 
 import { ToolLoopAgent, hasToolCall, tool, zodSchema } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { getAgent } from './agentService';
-import { Task, TaskExecutionMode, ToolPolicy } from '../../types';
+import {
+  Task,
+  TaskExecutionMode,
+  ToolPolicy,
+  ExecutionProfile,
+  ResearchConfig,
+  EvaluationPolicy,
+  GovernancePolicy,
+  getFeatureFlags
+} from '../../types';
 import {
   getTieredValue,
   getValue,
@@ -20,6 +31,10 @@ import { applyToolPolicies, clearTaskToolBudget } from './toolPolicyService';
 import { appendRunEvent } from './conversationService';
 import { createAndStartPlan } from './orchestratorService';
 import { executeClaudeCliTask } from './claudeCliService';
+import { selectModel, logRouteDecision } from './modelRoutingService';
+import { evaluateOutput } from './evaluatorService';
+import { executeDeepResearch } from './deepResearchService';
+import { requiresApproval, requestApproval } from './governanceService';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -27,7 +42,7 @@ dotenv.config();
 interface ToolCatalogItem {
   name: string;
   description: string;
-  source: 'builtin' | 'mcp';
+  source: 'builtin' | 'mcp' | 'provider';
   enabled: boolean;
 }
 
@@ -144,6 +159,32 @@ function getToolPolicy(config: Record<string, unknown>): ToolPolicy {
   };
 }
 
+function getEvaluationPolicy(config: Record<string, unknown>): EvaluationPolicy {
+  const raw = (config.evaluationPolicy ?? {}) as Record<string, unknown>;
+  return {
+    enabled: raw.enabled === true,
+    minScoreThreshold: typeof raw.minScoreThreshold === 'number' ? raw.minScoreThreshold : 0.5,
+    maxRevisionAttempts: typeof raw.maxRevisionAttempts === 'number' ? raw.maxRevisionAttempts : 2,
+    evaluationModel: typeof raw.evaluationModel === 'string' ? raw.evaluationModel : undefined,
+    criteria: Array.isArray(raw.criteria) ? raw.criteria.filter((c): c is string => typeof c === 'string') : undefined
+  };
+}
+
+function getGovernancePolicy(config: Record<string, unknown>): GovernancePolicy {
+  const raw = (config.governancePolicy ?? {}) as Record<string, unknown>;
+  return {
+    enabled: raw.enabled === true,
+    requireApprovalTools: Array.isArray(raw.requireApprovalTools)
+      ? raw.requireApprovalTools.filter((t): t is string => typeof t === 'string')
+      : undefined,
+    requireApprovalActions: Array.isArray(raw.requireApprovalActions)
+      ? raw.requireApprovalActions.filter((a): a is string => typeof a === 'string')
+      : undefined,
+    autoApproveTimeout: typeof raw.autoApproveTimeout === 'number' ? raw.autoApproveTimeout : 60_000,
+    notifyOnApproval: raw.notifyOnApproval === true
+  };
+}
+
 function isToolEnabledByPolicy(toolName: string, policy: ToolPolicy): boolean {
   if (policy.denyTools?.includes(toolName)) {
     return false;
@@ -198,6 +239,32 @@ export async function getToolCatalog(agentId?: string): Promise<{
     enabled: isToolEnabledByPolicy(name, policy)
   }));
 
+  const flags = getFeatureFlags();
+  const providerConfig = (config.providerTools ?? {}) as Record<string, unknown>;
+  const providerEnabled = flags.FEATURE_PROVIDER_TOOLS && providerConfig.enabled === true;
+  const allowedProviders = Array.isArray(providerConfig.allowedProviders)
+    ? providerConfig.allowedProviders.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : ['openai'];
+  const deniedProviders = new Set(
+    Array.isArray(providerConfig.deniedProviders)
+      ? providerConfig.deniedProviders.filter((value): value is string => typeof value === 'string')
+      : []
+  );
+
+  const providerCatalog: ToolCatalogItem[] = providerEnabled
+    ? allowedProviders
+      .filter((provider) => !deniedProviders.has(provider))
+      .map((provider) => {
+        const toolName = `provider.${provider}.nativeTools`;
+        return {
+          name: toolName,
+          description: `Native ${provider} provider tools`,
+          source: 'provider',
+          enabled: isToolEnabledByPolicy(toolName, policy)
+        };
+      })
+    : [];
+
   const builtinCatalog = BUILTIN_TOOL_CATALOG.map((tool) => ({
     ...tool,
     enabled: isToolEnabledByPolicy(tool.name, policy)
@@ -205,7 +272,7 @@ export async function getToolCatalog(agentId?: string): Promise<{
 
   return {
     agentId: agent.id,
-    tools: [...builtinCatalog, ...mcpCatalog],
+    tools: [...builtinCatalog, ...mcpCatalog, ...providerCatalog],
     policy,
     mcpServers: declaredServers
   };
@@ -214,7 +281,8 @@ export async function getToolCatalog(agentId?: string): Promise<{
 async function buildTools(
   task: Task,
   agentConfig: Record<string, unknown>,
-  traceContext: Awaited<ReturnType<typeof createAgentTrace>> | null
+  traceContext: Awaited<ReturnType<typeof createAgentTrace>> | null,
+  governancePolicy?: GovernancePolicy
 ): Promise<Record<string, any>> {
   const emitToolEvent = (type: 'tool.call' | 'tool.result' | 'tool.error', payload: Record<string, unknown>): void => {
     if (!task.runId || !task.conversationId) {
@@ -358,7 +426,43 @@ async function buildTools(
   const merged = { ...baseTools, ...mcpTools };
   const policy = getToolPolicy(agentConfig);
 
-  return applyToolPolicies(task.id, merged, policy, {
+  const flags = getFeatureFlags();
+  const governanceEnabled = flags.FEATURE_APPROVAL_GATES && governancePolicy?.enabled;
+  const toolsWithGovernance = governanceEnabled
+    ? Object.fromEntries(
+      Object.entries(merged).map(([toolName, toolDef]) => [
+        toolName,
+        {
+          ...toolDef,
+          execute: async (args: Record<string, unknown>) => {
+            const executeFn = toolDef?.execute as ((input: Record<string, unknown>) => Promise<unknown>) | undefined;
+            if (!executeFn) {
+              throw new Error(`Tool ${toolName} is missing execute function`);
+            }
+
+            if (!requiresApproval(toolName, governancePolicy) || !task.runId || !task.conversationId) {
+              return executeFn(args);
+            }
+
+            const approval = await requestApproval(toolName, args, {
+              runId: task.runId,
+              conversationId: task.conversationId,
+              reason: `Execution of ${toolName} requires approval`,
+              policy: governancePolicy
+            });
+
+            if (!approval.approved) {
+              throw new Error(`Tool ${toolName} execution denied (approval ${approval.approvalId})`);
+            }
+
+            return executeFn(args);
+          }
+        }
+      ])
+    )
+    : merged;
+
+  return applyToolPolicies(task.id, toolsWithGovernance, policy, {
     onToolStart: (toolName, input) => {
       emitToolEvent('tool.call', { toolName, input });
     },
@@ -435,6 +539,34 @@ function resolveTaskExecutionMode(task: Task, agentConfig: Record<string, unknow
   return taskMode ?? taskDataMode ?? agentMode ?? 'tool_loop';
 }
 
+function resolveExecutionProfile(task: Task): ExecutionProfile {
+  const profile = (task.data as { executionProfile?: unknown }).executionProfile;
+  if (profile === 'deep_research') {
+    return 'deep_research';
+  }
+  return 'standard';
+}
+
+function resolveResearchConfig(task: Task): ResearchConfig | undefined {
+  const research = (task.data as { research?: unknown }).research;
+  if (!research || typeof research !== 'object') {
+    return undefined;
+  }
+
+  const raw = research as Record<string, unknown>;
+  const depth = raw.depth;
+  if (depth !== 'quick' && depth !== 'standard' && depth !== 'deep') {
+    return undefined;
+  }
+
+  return {
+    depth,
+    parallelism: typeof raw.parallelism === 'number' ? raw.parallelism : undefined,
+    requireCitations: typeof raw.requireCitations === 'boolean' ? raw.requireCitations : undefined,
+    maxSources: typeof raw.maxSources === 'number' ? raw.maxSources : undefined
+  };
+}
+
 async function executeMockTask(task: Task): Promise<{
   message: string;
   finishReason: string;
@@ -509,6 +641,8 @@ async function executeMockTask(task: Task): Promise<{
 
 /**
  * Execute an agent task using ToolLoopAgent for multi-step tool execution.
+ * Now integrates model routing (WP-02), evaluator loop (WP-08),
+ * deep research (WP-04), and governance (WP-09).
  */
 export async function executeAgentTask(task: Task): Promise<any> {
   const agent = getAgent(task.agentId);
@@ -528,11 +662,59 @@ export async function executeAgentTask(task: Task): Promise<any> {
     : "You are a helpful and expert AI assistant. Please complete the user's task to the best of your ability.";
 
   const temperature = typeof agent.config.temperature === 'number' ? agent.config.temperature : 0.7;
-  const modelName = resolveModelName(agent.config.model);
-
   const userPrompt = typeof task.data.prompt === 'string'
     ? task.data.prompt
     : JSON.stringify(task.data);
+
+  // WP-04: Check for deep research execution profile
+  const executionProfile = resolveExecutionProfile(task);
+  const researchConfig = resolveResearchConfig(task);
+  const flags = getFeatureFlags();
+
+  if (executionProfile === 'deep_research' && flags.FEATURE_DEEP_RESEARCH && researchConfig) {
+    // Execute deep research pipeline before standard execution
+    if (task.runId && task.conversationId) {
+      const artifacts = await executeDeepResearch(userPrompt, researchConfig, {
+        runId: task.runId,
+        conversationId: task.conversationId
+      });
+
+      // Store artifacts in run metadata for later retrieval
+      return {
+        message: `Deep research completed with ${artifacts.sources?.length ?? 0} sources and ${artifacts.findings?.length ?? 0} findings. Overall confidence: ${(artifacts.confidenceSummary?.overall ?? 0).toFixed(2)}`,
+        finishReason: 'deep_research_complete',
+        metadata: {
+          executionProfile: 'deep_research',
+          sourceCount: artifacts.sources?.length ?? 0,
+          findingCount: artifacts.findings?.length ?? 0,
+          overallConfidence: artifacts.confidenceSummary?.overall,
+          artifacts
+        }
+      };
+    }
+  }
+
+  // WP-02: Resolve model via routing service
+  const modelRoutingConfig = typeof agentConfig.modelRouting === 'object' && agentConfig.modelRouting
+    ? agentConfig.modelRouting as any
+    : undefined;
+
+  const configuredModel = typeof agent.config.model === 'string'
+    ? resolveModelName(agent.config.model)
+    : undefined;
+  const routeDecision = selectModel(
+    userPrompt,
+    modelRoutingConfig,
+    modelRoutingConfig ? undefined : configuredModel
+  );
+
+  const modelName = resolveModelName(routeDecision.selectedModel);
+
+  // Log route decision
+  logRouteDecision(routeDecision, {
+    runId: task.runId,
+    conversationId: task.conversationId
+  });
 
   if (!hasModelCredentials() && allowMockFallback()) {
     return executeMockTask(task);
@@ -553,7 +735,8 @@ export async function executeAgentTask(task: Task): Promise<any> {
     );
   }
 
-  const combinedTools = await buildTools(task, agentConfig, traceContext);
+  const governancePolicy = getGovernancePolicy(agentConfig);
+  const combinedTools = await buildTools(task, agentConfig, traceContext, governancePolicy);
 
   const toolAgent = new ToolLoopAgent({
     model: openai(modelName),
@@ -565,8 +748,30 @@ export async function executeAgentTask(task: Task): Promise<any> {
 
   try {
     const result = await toolAgent.generate({ prompt: userPrompt }) as any;
-    const text = extractFinalMessage(result);
+    let text = extractFinalMessage(result);
     const finishReason = result.finishReason;
+
+    // WP-08: Evaluator loop
+    const evaluationPolicy = getEvaluationPolicy(agentConfig);
+    let evaluatorMetadata: Record<string, unknown> = {};
+
+    if (flags.FEATURE_EVALUATOR_LOOP && evaluationPolicy.enabled && text) {
+      const evalResult = await evaluateOutput(text, userPrompt, evaluationPolicy, {
+        runId: task.runId,
+        conversationId: task.conversationId
+      });
+
+      evaluatorMetadata = {
+        evaluatorScore: evalResult.score,
+        evaluatorPassed: evalResult.passed,
+        evaluatorFeedback: evalResult.feedback,
+        evaluatorCriteria: evalResult.criteria
+      };
+
+      if (!evalResult.passed) {
+        evaluatorMetadata.evaluatorFailed = true;
+      }
+    }
 
     let traceMetadata: Record<string, unknown> = {};
 
@@ -597,6 +802,12 @@ export async function executeAgentTask(task: Task): Promise<any> {
         model: modelName,
         steps: result.steps?.length || 0,
         toolCalls: result.toolCalls?.length || 0,
+        routeDecision: {
+          selectedModel: routeDecision.selectedModel,
+          reason: routeDecision.reason,
+          taskClass: routeDecision.taskClass
+        },
+        ...evaluatorMetadata,
         ...traceMetadata
       }
     };
@@ -639,8 +850,27 @@ export async function streamAgentTask(task: Task): Promise<any> {
     : "You are a helpful and expert AI assistant. Please complete the user's task to the best of your ability.";
 
   const temperature = typeof agent.config.temperature === 'number' ? agent.config.temperature : 0.7;
-  const modelName = resolveModelName(agent.config.model);
+
+  // WP-02: Use model routing for streaming too
+  const modelRoutingConfig = typeof agentConfig.modelRouting === 'object' && agentConfig.modelRouting
+    ? agentConfig.modelRouting as any
+    : undefined;
+
   const userPrompt = typeof task.data.prompt === 'string' ? task.data.prompt : JSON.stringify(task.data);
+  const configuredModel = typeof agent.config.model === 'string'
+    ? resolveModelName(agent.config.model)
+    : undefined;
+  const routeDecision = selectModel(
+    userPrompt,
+    modelRoutingConfig,
+    modelRoutingConfig ? undefined : configuredModel
+  );
+  const modelName = resolveModelName(routeDecision.selectedModel);
+
+  logRouteDecision(routeDecision, {
+    runId: task.runId,
+    conversationId: task.conversationId
+  });
 
   if (!hasModelCredentials() && allowMockFallback()) {
     const mock = await executeMockTask(task);
