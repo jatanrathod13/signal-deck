@@ -7,6 +7,7 @@ Guidelines for AI agents working in this Agent Orchestration Platform repository
 This is an Agent Orchestration Platform with:
 - **Client**: React + TypeScript + Vite + Tailwind CSS + Zustand + TanStack Query
 - **Server**: Express + TypeScript + Socket.IO + BullMQ + Redis
+- **Agents Workflow**: Support for both sequential and parallel team orchestration, integrating Vercel AI SDK and local Claude CLI tools via Model Context Protocol (MCP).
 
 ## Build/Lint/Test Commands
 
@@ -98,7 +99,7 @@ import { emitAgentStatus } from './socketService';
 
 ### Key Technologies
 - **Client**: React 18, Zustand 5, TanStack Query 5, Socket.IO client, Tailwind CSS 3
-- **Server**: Express 4, Socket.IO 4, BullMQ 5, Redis (ioredis), Zod 4, AI SDK
+- **Server**: Express 4, Socket.IO 4, BullMQ 5, Redis (ioredis), Zod 4, Vercel AI SDK, MCP SDK, LangSmith for tracing
 - **Build**: Vite (client), tsc (server), Jest + ts-jest (testing)
 
 ### File Structure
@@ -111,11 +112,12 @@ client/src/
   types/          # TypeScript types
 
 server/src/
-  services/       # Business logic
-  routes/         # Express routes
+  services/       # Business logic (Execution modes: ToolLoop, ClaudeCLI, Orchestration, Tracing, MCP)
+  routes/         # Express routes (Agents, Tasks, Plans, Executions)
   
 server/tests/     # Jest tests
 server/types/     # Shared TypeScript types
+server/worker/    # BullMQ Task / Flow workers
 ```
 
 ### Environment Variables
