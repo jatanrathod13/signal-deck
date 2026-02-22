@@ -9,6 +9,23 @@ import { redis as defaultRedis } from '../../config/redis';
 // Default TTL in seconds (1 hour)
 const DEFAULT_TTL = 3600;
 const MEMORY_NAMESPACE = 'memory';
+const SHARED_PREFIX = `${MEMORY_NAMESPACE}:shared:`;
+
+function resolveSharedKey(key: string): string {
+  if (key.startsWith(`${MEMORY_NAMESPACE}:`)) {
+    return key;
+  }
+
+  return `${SHARED_PREFIX}${key}`;
+}
+
+function stripSharedPrefix(key: string): string {
+  if (key.startsWith(SHARED_PREFIX)) {
+    return key.slice(SHARED_PREFIX.length);
+  }
+
+  return key;
+}
 
 // Allow custom Redis connection for testing
 let redisInstance: Redis = defaultRedis;
@@ -34,7 +51,7 @@ export function getRedisInstance(): Redis {
  * @param ttl - Time to live in seconds (default: 3600)
  */
 export async function setValue(key: string, value: string, ttl: number = DEFAULT_TTL): Promise<void> {
-  await redisInstance.set(key, value, 'EX', ttl);
+  await redisInstance.set(resolveSharedKey(key), value, 'EX', ttl);
 }
 
 /**
@@ -43,6 +60,12 @@ export async function setValue(key: string, value: string, ttl: number = DEFAULT
  * @returns The stored value or null if not found
  */
 export async function getValue(key: string): Promise<string | null> {
+  const namespacedValue = await redisInstance.get(resolveSharedKey(key));
+  if (namespacedValue !== null) {
+    return namespacedValue;
+  }
+
+  // Backward compatibility for older entries that were not namespaced.
   return await redisInstance.get(key);
 }
 
@@ -52,7 +75,7 @@ export async function getValue(key: string): Promise<string | null> {
  * @returns True if the key was deleted, false if it didn't exist
  */
 export async function deleteValue(key: string): Promise<boolean> {
-  const result = await redisInstance.del(key);
+  const result = await redisInstance.del(resolveSharedKey(key), key);
   return result > 0;
 }
 
@@ -62,7 +85,17 @@ export async function deleteValue(key: string): Promise<boolean> {
  * @returns Array of matching keys
  */
 export async function listKeys(pattern: string = '*'): Promise<string[]> {
-  return await redisInstance.keys(pattern);
+  if (pattern === '*') {
+    const keys = await redisInstance.keys(`${SHARED_PREFIX}*`);
+    return keys.map(stripSharedPrefix);
+  }
+
+  if (pattern.startsWith(`${MEMORY_NAMESPACE}:`)) {
+    return await redisInstance.keys(pattern);
+  }
+
+  const keys = await redisInstance.keys(`${SHARED_PREFIX}${pattern}`);
+  return keys.map(stripSharedPrefix);
 }
 
 /**
@@ -73,7 +106,7 @@ export async function listKeys(pattern: string = '*'): Promise<string[]> {
  */
 export async function setJsonValue(key: string, value: unknown, ttl: number = DEFAULT_TTL): Promise<void> {
   const jsonString = JSON.stringify(value);
-  await redisInstance.set(key, jsonString, 'EX', ttl);
+  await redisInstance.set(resolveSharedKey(key), jsonString, 'EX', ttl);
 }
 
 /**
@@ -82,7 +115,7 @@ export async function setJsonValue(key: string, value: unknown, ttl: number = DE
  * @returns The parsed JSON value or null if not found
  */
 export async function getJsonValue<T>(key: string): Promise<T | null> {
-  const value = await redisInstance.get(key);
+  const value = await getValue(key);
   if (value === null) {
     return null;
   }
@@ -96,8 +129,13 @@ export async function getJsonValue<T>(key: string): Promise<T | null> {
  * @returns True if the key exists and TTL was refreshed
  */
 export async function refreshTTL(key: string, ttl: number = DEFAULT_TTL): Promise<boolean> {
-  const result = await redisInstance.expire(key, ttl);
-  return result === 1;
+  const namespacedResult = await redisInstance.expire(resolveSharedKey(key), ttl);
+  if (namespacedResult === 1) {
+    return true;
+  }
+
+  const legacyResult = await redisInstance.expire(key, ttl);
+  return legacyResult === 1;
 }
 
 /**

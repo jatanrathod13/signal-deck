@@ -28,6 +28,8 @@ interface CreateTaskBody {
   stepId?: string;
   dependsOnTaskIds?: string[];
   metadata?: Record<string, unknown>;
+  conversationId?: string;
+  runId?: string;
 }
 
 interface TaskQuery {
@@ -47,7 +49,9 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
       planId,
       stepId,
       dependsOnTaskIds,
-      metadata
+      metadata,
+      conversationId,
+      runId
     } = req.body;
 
     if (!agentId || !type) {
@@ -73,6 +77,8 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
       stepId,
       dependsOnTaskIds,
       metadata,
+      conversationId,
+      runId,
       childTaskIds: [],
       retryCount: 0
     };

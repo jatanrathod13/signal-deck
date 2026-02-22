@@ -15,12 +15,14 @@ interface CreatePlanBody {
   stepPrompts?: string[];
   autoGenerate?: boolean;
   maxSteps?: number;
+  conversationId?: string;
+  runId?: string;
   metadata?: Record<string, unknown>;
 }
 
 router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => {
   try {
-    const { objective, defaultAgentId, stepPrompts, autoGenerate = false, maxSteps, metadata } = req.body;
+    const { objective, defaultAgentId, stepPrompts, autoGenerate = false, maxSteps, conversationId, runId, metadata } = req.body;
 
     if (!objective || !defaultAgentId) {
       return res.status(400).json({
@@ -42,6 +44,8 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
       defaultAgentId,
       stepPrompts: hasManualSteps ? stepPrompts : undefined,
       maxSteps,
+      conversationId,
+      runId,
       metadata
     });
 

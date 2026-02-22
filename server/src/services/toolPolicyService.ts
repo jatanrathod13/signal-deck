@@ -9,6 +9,12 @@ import { incrementMetric } from './metricsService';
 
 const perTaskToolCallCount = new Map<string, number>();
 
+interface ToolPolicyHooks {
+  onToolStart?: (toolName: string, input: Record<string, unknown>) => void;
+  onToolResult?: (toolName: string, output: unknown) => void;
+  onToolError?: (toolName: string, error: string) => void;
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -46,7 +52,8 @@ export function clearTaskToolBudget(taskId: string): void {
 export function applyToolPolicies(
   taskId: string,
   tools: Record<string, any>,
-  policy: ToolPolicy
+  policy: ToolPolicy,
+  hooks?: ToolPolicyHooks
 ): Record<string, any> {
   const timeoutMs = policy.perToolTimeoutMs ?? 30_000;
   const maxToolCalls = policy.maxToolCallsPerTask ?? 40;
@@ -60,6 +67,7 @@ export function applyToolPolicies(
       execute: async (args: Record<string, unknown>) => {
         if (!isToolAllowed(toolName, policy)) {
           incrementMetric('toolFailures');
+          hooks?.onToolError?.(toolName, `Tool ${toolName} is not allowed by policy`);
           throw new Error(`Tool ${toolName} is not allowed by policy`);
         }
 
@@ -68,10 +76,12 @@ export function applyToolPolicies(
 
         if (callCount > maxToolCalls) {
           incrementMetric('toolFailures');
+          hooks?.onToolError?.(toolName, `Task ${taskId} exceeded max tool calls (${maxToolCalls})`);
           throw new Error(`Task ${taskId} exceeded max tool calls (${maxToolCalls})`);
         }
 
         incrementMetric('toolCalls');
+        hooks?.onToolStart?.(toolName, args);
 
         try {
           const executeFn = toolDef?.execute as ((input: Record<string, unknown>) => Promise<unknown>) | undefined;
@@ -79,9 +89,12 @@ export function applyToolPolicies(
             throw new Error(`Tool ${toolName} is missing execute function`);
           }
 
-          return await withTimeout(Promise.resolve(executeFn(args)), timeoutMs);
+          const result = await withTimeout(Promise.resolve(executeFn(args)), timeoutMs);
+          hooks?.onToolResult?.(toolName, result);
+          return result;
         } catch (error) {
           incrementMetric('toolFailures');
+          hooks?.onToolError?.(toolName, error instanceof Error ? error.message : 'Unknown tool error');
           throw error;
         }
       }

@@ -217,6 +217,14 @@ export async function submitTask(task: Task): Promise<string> {
     newTask.metadata = task.metadata;
   }
 
+  if (task.conversationId) {
+    newTask.conversationId = task.conversationId;
+  }
+
+  if (task.runId) {
+    newTask.runId = task.runId;
+  }
+
   if (task.dependsOnTaskIds && task.dependsOnTaskIds.length > 0) {
     newTask.dependsOnTaskIds = task.dependsOnTaskIds;
   }
@@ -291,6 +299,8 @@ export async function retryTask(taskId: string): Promise<string> {
   newTask.stepId = task.stepId;
   newTask.dependsOnTaskIds = task.dependsOnTaskIds ?? [];
   newTask.metadata = task.metadata;
+  newTask.conversationId = task.conversationId;
+  newTask.runId = task.runId;
   newTask.retryCount = (task.retryCount ?? 0) + 1;
 
   taskStore.set(newTask.id, newTask);

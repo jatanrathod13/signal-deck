@@ -39,19 +39,19 @@ describe('SharedMemoryService', () => {
     it('should store value with default TTL', async () => {
       await setValue('test-key', 'test-value');
 
-      expect(mockRedis.set).toHaveBeenCalledWith('test-key', 'test-value', 'EX', 3600);
+      expect(mockRedis.set).toHaveBeenCalledWith('memory:shared:test-key', 'test-value', 'EX', 3600);
     });
 
     it('should store value with custom TTL', async () => {
       await setValue('test-key', 'test-value', 1800);
 
-      expect(mockRedis.set).toHaveBeenCalledWith('test-key', 'test-value', 'EX', 1800);
+      expect(mockRedis.set).toHaveBeenCalledWith('memory:shared:test-key', 'test-value', 'EX', 1800);
     });
 
     it('should store value with TTL of 0 (no expiration)', async () => {
       await setValue('test-key', 'test-value', 0);
 
-      expect(mockRedis.set).toHaveBeenCalledWith('test-key', 'test-value', 'EX', 0);
+      expect(mockRedis.set).toHaveBeenCalledWith('memory:shared:test-key', 'test-value', 'EX', 0);
     });
   });
 
@@ -62,7 +62,7 @@ describe('SharedMemoryService', () => {
       const result = await getValue('test-key');
 
       expect(result).toBe('stored-value');
-      expect(mockRedis.get).toHaveBeenCalledWith('test-key');
+      expect(mockRedis.get).toHaveBeenCalledWith('memory:shared:test-key');
     });
 
     it('should return null when key does not exist', async () => {
@@ -81,7 +81,7 @@ describe('SharedMemoryService', () => {
       const result = await deleteValue('test-key');
 
       expect(result).toBe(true);
-      expect(mockRedis.del).toHaveBeenCalledWith('test-key');
+      expect(mockRedis.del).toHaveBeenCalledWith('memory:shared:test-key', 'test-key');
     });
 
     it('should return false when key did not exist', async () => {
@@ -95,21 +95,25 @@ describe('SharedMemoryService', () => {
 
   describe('listKeys', () => {
     it('should return all keys with default pattern', async () => {
-      mockRedis.keys.mockResolvedValueOnce(['key1', 'key2', 'key3']);
+      mockRedis.keys.mockResolvedValueOnce([
+        'memory:shared:key1',
+        'memory:shared:key2',
+        'memory:shared:key3'
+      ]);
 
       const result = await listKeys();
 
       expect(result).toEqual(['key1', 'key2', 'key3']);
-      expect(mockRedis.keys).toHaveBeenCalledWith('*');
+      expect(mockRedis.keys).toHaveBeenCalledWith('memory:shared:*');
     });
 
     it('should return keys matching custom pattern', async () => {
-      mockRedis.keys.mockResolvedValueOnce(['agent:1', 'agent:2']);
+      mockRedis.keys.mockResolvedValueOnce(['memory:shared:agent:1', 'memory:shared:agent:2']);
 
       const result = await listKeys('agent:*');
 
       expect(result).toEqual(['agent:1', 'agent:2']);
-      expect(mockRedis.keys).toHaveBeenCalledWith('agent:*');
+      expect(mockRedis.keys).toHaveBeenCalledWith('memory:shared:agent:*');
     });
 
     it('should return empty array when no keys match', async () => {
@@ -128,7 +132,7 @@ describe('SharedMemoryService', () => {
       await setJsonValue('json-key', testObj);
 
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'json-key',
+        'memory:shared:json-key',
         JSON.stringify(testObj),
         'EX',
         3600
@@ -141,7 +145,7 @@ describe('SharedMemoryService', () => {
       await setJsonValue('array-key', testArray);
 
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'array-key',
+        'memory:shared:array-key',
         JSON.stringify(testArray),
         'EX',
         3600
@@ -175,7 +179,7 @@ describe('SharedMemoryService', () => {
       const result = await refreshTTL('test-key', 1800);
 
       expect(result).toBe(true);
-      expect(mockRedis.expire).toHaveBeenCalledWith('test-key', 1800);
+      expect(mockRedis.expire).toHaveBeenCalledWith('memory:shared:test-key', 1800);
     });
 
     it('should return false when key does not exist', async () => {
@@ -191,7 +195,7 @@ describe('SharedMemoryService', () => {
     it('should store and retrieve value correctly', async () => {
       // Set a value
       await setValue('roundtrip-key', 'roundtrip-value');
-      expect(mockRedis.set).toHaveBeenCalledWith('roundtrip-key', 'roundtrip-value', 'EX', 3600);
+      expect(mockRedis.set).toHaveBeenCalledWith('memory:shared:roundtrip-key', 'roundtrip-value', 'EX', 3600);
 
       // Get the value back
       mockRedis.get.mockResolvedValueOnce('roundtrip-value');
@@ -202,7 +206,7 @@ describe('SharedMemoryService', () => {
     it('should handle set, get, delete cycle', async () => {
       // Set
       await setValue('cycle-key', 'cycle-value');
-      expect(mockRedis.set).toHaveBeenCalledWith('cycle-key', 'cycle-value', 'EX', 3600);
+      expect(mockRedis.set).toHaveBeenCalledWith('memory:shared:cycle-key', 'cycle-value', 'EX', 3600);
 
       // Get (exists)
       mockRedis.get.mockResolvedValueOnce('cycle-value');

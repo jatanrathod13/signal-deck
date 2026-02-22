@@ -11,6 +11,7 @@ import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/so
 import { executeAgentTask } from '../src/services/executionService';
 import { createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
 import { incrementMetric } from '../src/services/metricsService';
+import { addConversationMessage, appendRunEvent, updateRun } from '../src/services/conversationService';
 
 // Redis connection for BullMQ worker
 let redisConnection: Redis | null = null;
@@ -99,6 +100,18 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
   const processingTask = updateTaskStatus(taskId, 'processing');
   if (processingTask) {
     emitTaskStatus(processingTask);
+    if (processingTask.runId && processingTask.conversationId) {
+      appendRunEvent({
+        runId: processingTask.runId,
+        conversationId: processingTask.conversationId,
+        type: 'task.status',
+        payload: {
+          taskId: processingTask.id,
+          status: processingTask.status,
+          type: processingTask.type
+        }
+      });
+    }
   }
 
   try {
@@ -119,6 +132,62 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
       emitTaskCompleted(completedTask);
       incrementMetric('tasksCompleted');
       await handleTaskCompletion(completedTask);
+
+      if (completedTask.runId && completedTask.conversationId) {
+        const summaryMessage = (() => {
+          if (
+            completedTask.result &&
+            typeof completedTask.result === 'object' &&
+            typeof (completedTask.result as { message?: unknown }).message === 'string'
+          ) {
+            return (completedTask.result as { message: string }).message;
+          }
+
+          if (typeof completedTask.result === 'string') {
+            return completedTask.result;
+          }
+
+          return JSON.stringify(completedTask.result);
+        })();
+
+        if (summaryMessage && summaryMessage !== '{}') {
+          addConversationMessage({
+            conversationId: completedTask.conversationId,
+            role: 'assistant',
+            content: summaryMessage,
+            runId: completedTask.runId,
+            metadata: {
+              taskId: completedTask.id
+            }
+          });
+
+          appendRunEvent({
+            runId: completedTask.runId,
+            conversationId: completedTask.conversationId,
+            type: 'message.created',
+            payload: {
+              role: 'assistant',
+              content: summaryMessage,
+              taskId: completedTask.id
+            }
+          });
+        }
+
+        if (!completedTask.parentTaskId && !completedTask.planId) {
+          updateRun(completedTask.runId, 'completed', {
+            summary: summaryMessage
+          });
+
+          appendRunEvent({
+            runId: completedTask.runId,
+            conversationId: completedTask.conversationId,
+            type: 'run.completed',
+            payload: {
+              taskId: completedTask.id
+            }
+          });
+        }
+      }
     }
 
     console.log(`Task ${taskId} completed successfully`);
@@ -135,6 +204,23 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
       emitTaskStatus(failedTask);
       incrementMetric('tasksFailed');
       await handleTaskFailure(failedTask);
+
+      if (failedTask.runId && failedTask.conversationId) {
+        updateRun(failedTask.runId, 'failed', {
+          error: errorMessage
+        });
+
+        appendRunEvent({
+          runId: failedTask.runId,
+          conversationId: failedTask.conversationId,
+          type: 'run.failed',
+          payload: {
+            taskId: failedTask.id,
+            error: errorMessage,
+            errorType
+          }
+        });
+      }
     }
 
     throw error;
@@ -178,6 +264,8 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
     defaultAgentId,
     stepPrompts,
     maxSteps,
+    conversationId: task.conversationId,
+    runId: task.runId,
     metadata: {
       ...(metadata ?? {}),
       parentTaskId: task.id

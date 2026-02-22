@@ -4,7 +4,7 @@
  */
 
 import { Server } from 'socket.io';
-import { Agent, PlanStatus, PlanStepStatus, Task } from '../../types';
+import { Agent, PlanStatus, PlanStepStatus, RunEvent, Task } from '../../types';
 
 // Try to import io from server entry, but handle case where it's not initialized
 let io: Server | null = null;
@@ -59,6 +59,8 @@ export function emitTaskStatus(task: Task): void {
     agentId: task.agentId,
     planId: task.planId,
     stepId: task.stepId,
+    runId: task.runId,
+    conversationId: task.conversationId,
     timestamp: new Date()
   });
 }
@@ -139,6 +141,24 @@ export function emitPlanStepStatus(planId: string, stepId: string, status: PlanS
     stepId,
     status,
     timestamp: new Date()
+  });
+}
+
+/**
+ * Emit run event updates to clients.
+ */
+export function emitRunEvent(event: RunEvent): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('run-event', {
+    id: event.id,
+    runId: event.runId,
+    conversationId: event.conversationId,
+    type: event.type,
+    payload: event.payload,
+    timestamp: event.timestamp
   });
 }
 

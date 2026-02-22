@@ -94,6 +94,8 @@ export async function createAndStartPlan(input: {
   defaultAgentId: string;
   stepPrompts?: string[];
   maxSteps?: number;
+  conversationId?: string;
+  runId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<OrchestrationSummary> {
   const prompts = input.stepPrompts && input.stepPrompts.length > 0
@@ -109,7 +111,11 @@ export async function createAndStartPlan(input: {
   const steps = createSimpleStepPlan(input.objective, input.defaultAgentId, prompts);
   const plan = await createPlan({
     objective: input.objective,
-    metadata: input.metadata,
+    metadata: {
+      ...(input.metadata ?? {}),
+      conversationId: input.conversationId,
+      runId: input.runId
+    },
     steps
   });
 
@@ -128,7 +134,9 @@ export async function createAndStartPlan(input: {
       stepId: step.id,
       metadata: {
         orchestration: true
-      }
+      },
+      conversationId: input.conversationId,
+      runId: input.runId
     };
 
     const taskId = await submitTask(task);
@@ -171,7 +179,9 @@ export async function handleTaskCompletion(task: Task): Promise<void> {
       parentTaskId: task.id,
       metadata: {
         orchestration: true
-      }
+      },
+      conversationId: task.conversationId,
+      runId: task.runId
     };
 
     const childTaskId = await submitTask(childTask);
