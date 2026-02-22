@@ -17,6 +17,7 @@ import {
   Timer,
   Trophy,
   Play,
+  PauseCircle,
 } from 'lucide-react';
 import type { Task, TaskStatus } from '../types';
 import { useCancelTask, useRetryTask } from '../hooks/useTasks';
@@ -35,6 +36,11 @@ const statusConfig: Record<TaskStatus, { label: string; color: string; icon: Rea
     label: 'Racing',
     color: 'bg-[#ff2800]/20 text-[#ff2800] border border-[#ff2800]/30',
     icon: Loader2,
+  },
+  blocked: {
+    label: 'Boxed In',
+    color: 'bg-amber-900/20 text-amber-300 border border-amber-700/40',
+    icon: PauseCircle,
   },
   completed: {
     label: 'Chequered',
@@ -67,7 +73,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
 
   // Live lap time tracking
   useEffect(() => {
-    if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+    if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled' || task.status === 'blocked') {
       // Use updatedAt as fallback if completedAt doesn't exist
       const endTime = (task as { completedAt?: string }).completedAt || task.updatedAt;
       if (endTime && task.createdAt) {
@@ -161,7 +167,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
     }
   };
 
-  const isCancellable = status === 'pending';
+  const isCancellable = status === 'pending' || status === 'blocked';
   const isRetryable = status === 'failed';
   const isLoading = cancelTaskMutation.isPending || retryTaskMutation.isPending;
 
@@ -266,7 +272,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Stream Button - for pending or processing tasks */}
-          {(status === 'pending' || status === 'processing') && currentTask.agentId && (
+          {(status === 'pending' || status === 'processing' || status === 'blocked') && currentTask.agentId && (
             <button
               onClick={handleStream}
               className={cn(

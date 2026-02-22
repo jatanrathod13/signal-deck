@@ -1,12 +1,14 @@
 /**
  * TaskQueueService - Task queue management service using BullMQ
- * Provides task submission, retrieval, cancellation, and retry functionality
+ * Provides task submission, retrieval, cancellation, retry, and durable metadata.
  */
 
-import { Queue, Job } from 'bullmq';
+import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { Task, TaskStatus } from '../../types';
-import { emitTaskStatus, emitTaskCompleted } from './socketService';
+import { Task, TaskStatus, TaskErrorType } from '../../types';
+import { emitTaskStatus } from './socketService';
+import { getTaskByIdempotencyKey, loadAllTasks, saveTask } from './taskPersistenceService';
+import { incrementMetric } from './metricsService';
 
 // Redis connection for BullMQ
 let redisConnection: Redis | null = null;
@@ -18,7 +20,7 @@ function getRedisConnection(): Redis {
   if (!redisConnection) {
     redisConnection = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
+      port: parseInt(process.env.REDIS_PORT || '6379', 10),
       maxRetriesPerRequest: 3,
       lazyConnect: true
     });
@@ -33,8 +35,7 @@ export function setRedisConnection(connection: Redis): void {
   redisConnection = connection;
 }
 
-// In-memory task storage for quick retrieval
-// BullMQ stores jobs in Redis, but we keep metadata for quick access
+// In-memory task cache for fast reads, backed by persistence
 const taskStore = new Map<string, Task>();
 
 // Create the BullMQ queue
@@ -69,6 +70,16 @@ export function setTaskQueue(queue: Queue): void {
 }
 
 /**
+ * Load persisted tasks into memory on startup.
+ */
+export async function bootstrapTaskStore(): Promise<void> {
+  const persistedTasks = await loadAllTasks();
+  for (const task of persistedTasks) {
+    taskStore.set(task.id, task);
+  }
+}
+
+/**
  * Generate a unique task ID
  */
 function generateTaskId(): string {
@@ -88,14 +99,30 @@ function createTask(agentId: string, type: string, data: Record<string, unknown>
     status: 'pending',
     priority,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    retryCount: 0,
+    childTaskIds: [],
+    dependsOnTaskIds: []
   };
+}
+
+/**
+ * Persist task in background, never throw to callers.
+ */
+function persistTask(task: Task): void {
+  saveTask(task).catch((error) => {
+    console.warn('[TaskQueue] Failed to persist task:', error);
+  });
 }
 
 /**
  * Update task status and metadata
  */
-export function updateTaskStatus(taskId: string, status: TaskStatus, additionalUpdates?: Partial<Task>): Task | undefined {
+export function updateTaskStatus(
+  taskId: string,
+  status: TaskStatus,
+  additionalUpdates?: Partial<Task>
+): Task | undefined {
   const task = taskStore.get(taskId);
   if (!task) {
     return undefined;
@@ -108,7 +135,38 @@ export function updateTaskStatus(taskId: string, status: TaskStatus, additionalU
     Object.assign(task, additionalUpdates);
   }
 
+  persistTask(task);
   return task;
+}
+
+/**
+ * Update task failure metadata
+ */
+export function markTaskFailure(taskId: string, error: string, errorType: TaskErrorType = 'unknown_error'): Task | undefined {
+  return updateTaskStatus(taskId, 'failed', {
+    error,
+    errorType
+  });
+}
+
+/**
+ * Link child task to parent for graph observability.
+ */
+export function linkChildTask(parentTaskId: string, childTaskId: string): void {
+  const parentTask = taskStore.get(parentTaskId);
+  if (!parentTask) {
+    return;
+  }
+
+  if (!parentTask.childTaskIds) {
+    parentTask.childTaskIds = [];
+  }
+
+  if (!parentTask.childTaskIds.includes(childTaskId)) {
+    parentTask.childTaskIds.push(childTaskId);
+    parentTask.updatedAt = new Date();
+    persistTask(parentTask);
+  }
 }
 
 /**
@@ -117,18 +175,58 @@ export function updateTaskStatus(taskId: string, status: TaskStatus, additionalU
  * @returns Promise<string> - The task ID
  */
 export async function submitTask(task: Task): Promise<string> {
-  // Ensure task has required fields
+  if (task.idempotencyKey) {
+    const existingTaskId = await getTaskByIdempotencyKey(task.idempotencyKey);
+    if (existingTaskId) {
+      const existingTask = taskStore.get(existingTaskId);
+      if (existingTask) {
+        return existingTask.id;
+      }
+    }
+  }
+
   const newTask = task.id
-    ? { ...task, status: 'pending' as TaskStatus, updatedAt: new Date() }
+    ? {
+      ...task,
+      id: task.id,
+      status: 'pending' as TaskStatus,
+      updatedAt: new Date(),
+      retryCount: task.retryCount ?? 0,
+      childTaskIds: task.childTaskIds ?? [],
+      dependsOnTaskIds: task.dependsOnTaskIds ?? []
+    }
     : createTask(task.agentId, task.type, task.data, task.priority);
 
-  // Store in memory for quick retrieval
+  if (task.idempotencyKey) {
+    newTask.idempotencyKey = task.idempotencyKey;
+  }
+
+  if (task.parentTaskId) {
+    newTask.parentTaskId = task.parentTaskId;
+  }
+
+  if (task.planId) {
+    newTask.planId = task.planId;
+  }
+
+  if (task.stepId) {
+    newTask.stepId = task.stepId;
+  }
+
+  if (task.metadata) {
+    newTask.metadata = task.metadata;
+  }
+
+  if (task.dependsOnTaskIds && task.dependsOnTaskIds.length > 0) {
+    newTask.dependsOnTaskIds = task.dependsOnTaskIds;
+  }
+
   taskStore.set(newTask.id, newTask);
+  persistTask(newTask);
 
-  // Emit task status event
   emitTaskStatus(newTask);
+  incrementMetric('tasksSubmitted');
 
-  // Add to BullMQ queue
   await getTaskQueue().add(
     newTask.type,
     {
@@ -147,8 +245,6 @@ export async function submitTask(task: Task): Promise<string> {
 
 /**
  * Get a task by ID
- * @param taskId - The task ID to retrieve
- * @returns Task object or undefined if not found
  */
 export function getTask(taskId: string): Task | undefined {
   return taskStore.get(taskId);
@@ -156,9 +252,6 @@ export function getTask(taskId: string): Task | undefined {
 
 /**
  * Cancel a task by ID
- * Cancels a pending or processing task
- * @param taskId - The task ID to cancel
- * @returns boolean - True if task was cancelled, false if not found or already completed/failed
  */
 export function cancelTask(taskId: string): boolean {
   const task = taskStore.get(taskId);
@@ -166,25 +259,21 @@ export function cancelTask(taskId: string): boolean {
     return false;
   }
 
-  // Can only cancel pending or processing tasks
-  if (task.status !== 'pending' && task.status !== 'processing') {
+  if (task.status !== 'pending' && task.status !== 'processing' && task.status !== 'blocked') {
     return false;
   }
 
   task.status = 'cancelled';
   task.updatedAt = new Date();
 
-  // Emit task status event
   emitTaskStatus(task);
-
+  persistTask(task);
+  incrementMetric('tasksCancelled');
   return true;
 }
 
 /**
  * Retry a failed task
- * Creates a new task with the same data
- * @param taskId - The failed task ID to retry
- * @returns Promise<string> - The new task ID, or throws if task not found or not in failed state
  */
 export async function retryTask(taskId: string): Promise<string> {
   const task = taskStore.get(taskId);
@@ -192,21 +281,23 @@ export async function retryTask(taskId: string): Promise<string> {
     throw new Error('Task not found');
   }
 
-  // Can only retry failed or cancelled tasks
   if (task.status !== 'failed' && task.status !== 'cancelled') {
     throw new Error('Task can only be retried if it is failed or cancelled');
   }
 
-  // Create a new task with the same data
   const newTask = createTask(task.agentId, task.type, task.data, task.priority);
+  newTask.parentTaskId = task.parentTaskId;
+  newTask.planId = task.planId;
+  newTask.stepId = task.stepId;
+  newTask.dependsOnTaskIds = task.dependsOnTaskIds ?? [];
+  newTask.metadata = task.metadata;
+  newTask.retryCount = (task.retryCount ?? 0) + 1;
 
-  // Store in memory
   taskStore.set(newTask.id, newTask);
+  persistTask(newTask);
 
-  // Emit task status event
   emitTaskStatus(newTask);
 
-  // Add to BullMQ queue
   await getTaskQueue().add(
     newTask.type,
     {
@@ -225,7 +316,6 @@ export async function retryTask(taskId: string): Promise<string> {
 
 /**
  * Get all tasks
- * @returns Array of all tasks
  */
 export function getAllTasks(): Task[] {
   return Array.from(taskStore.values());
@@ -233,11 +323,23 @@ export function getAllTasks(): Task[] {
 
 /**
  * Get tasks by agent ID
- * @param agentId - The agent ID to filter by
- * @returns Array of tasks for the agent
  */
 export function getTasksByAgent(agentId: string): Task[] {
-  return Array.from(taskStore.values()).filter(task => task.agentId === agentId);
+  return Array.from(taskStore.values()).filter((task) => task.agentId === agentId);
+}
+
+/**
+ * Get tasks by plan ID
+ */
+export function getTasksByPlan(planId: string): Task[] {
+  return Array.from(taskStore.values()).filter((task) => task.planId === planId);
+}
+
+/**
+ * Get child tasks for a parent task
+ */
+export function getChildTasks(parentTaskId: string): Task[] {
+  return Array.from(taskStore.values()).filter((task) => task.parentTaskId === parentTaskId);
 }
 
 /**

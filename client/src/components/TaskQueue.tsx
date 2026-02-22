@@ -15,6 +15,7 @@ import { cn } from '../lib/utils';
 const statusGroups: { label: string; value: TaskStatus | 'all'; icon: React.ElementType; color: string }[] = [
   { label: 'All Laps', value: 'all', icon: ListChecks, color: 'text-gray-400' },
   { label: 'On Grid', value: 'pending', icon: Clock, color: 'text-[#ffcc00]' },
+  { label: 'Blocked', value: 'blocked', icon: Ban, color: 'text-amber-300' },
   { label: 'Racing', value: 'processing', icon: Gauge, color: 'text-[#ff2800]' },
   { label: 'Chequered', value: 'completed', icon: CheckCircle, color: 'text-green-400' },
   { label: 'DNF', value: 'failed', icon: XCircle, color: 'text-red-400' },
@@ -110,6 +111,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
 
     const groups: Record<TaskStatus, typeof tasksList> = {
       pending: [],
+      blocked: [],
       processing: [],
       completed: [],
       failed: [],
@@ -127,10 +129,11 @@ export function TaskQueue({ className }: TaskQueueProps) {
 
   // Get counts for each status
   const statusCounts = useMemo(() => {
-    if (!groupedTasks) return { pending: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 };
+    if (!groupedTasks) return { pending: 0, blocked: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 };
 
     return {
       pending: groupedTasks.pending.length,
+      blocked: groupedTasks.blocked.length,
       processing: groupedTasks.processing.length,
       completed: groupedTasks.completed.length,
       failed: groupedTasks.failed.length,
@@ -464,6 +467,21 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   <div className="space-y-2">
                     {groupedTasks.pending.map((task, index) => (
                       <TaskItem key={task.id} task={task} position={index + 1} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Blocked */}
+              {groupedTasks && groupedTasks.blocked.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-amber-300 flex items-center gap-2 uppercase tracking-wider">
+                    <Ban className="w-4 h-4" />
+                    Blocked ({groupedTasks.blocked.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {groupedTasks.blocked.map((task) => (
+                      <TaskItem key={task.id} task={task} />
                     ))}
                   </div>
                 </div>
