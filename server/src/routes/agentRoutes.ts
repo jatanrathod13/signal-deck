@@ -17,6 +17,12 @@ interface CreateAgentBody {
   config?: Record<string, unknown>;
 }
 
+interface UpdateAgentBody {
+  name?: string;
+  type?: string;
+  config?: Record<string, unknown>;
+}
+
 // POST /api/agents - Deploy new agent
 router.post('/', (req: Request<{}, {}, CreateAgentBody>, res: Response) => {
   try {
@@ -82,6 +88,72 @@ router.get('/:id', (req: Request<{ id: string }>, res: Response) => {
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get agent'
+    });
+  }
+});
+
+// PATCH /api/agents/:id - Update agent metadata/config
+router.patch('/:id', (req: Request<{ id: string }, {}, UpdateAgentBody>, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, type, config } = req.body ?? {};
+
+    if (name !== undefined && (!name || name.trim().length === 0)) {
+      return res.status(400).json({
+        success: false,
+        error: 'name must be a non-empty string when provided'
+      });
+    }
+
+    if (type !== undefined && (!type || type.trim().length === 0)) {
+      return res.status(400).json({
+        success: false,
+        error: 'type must be a non-empty string when provided'
+      });
+    }
+
+    if (config !== undefined && (typeof config !== 'object' || config === null || Array.isArray(config))) {
+      return res.status(400).json({
+        success: false,
+        error: 'config must be an object when provided'
+      });
+    }
+
+    const updates: UpdateAgentBody = {};
+    if (name !== undefined) {
+      updates.name = name.trim();
+    }
+    if (type !== undefined) {
+      updates.type = type.trim();
+    }
+    if (config !== undefined) {
+      updates.config = config;
+    }
+
+    const hasUpdates = Object.keys(updates).length > 0;
+    if (!hasUpdates) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one of name, type, or config must be provided'
+      });
+    }
+
+    const agent = agentService.updateAgent(id, updates);
+
+    return res.status(200).json({
+      success: true,
+      data: agent
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Agent not found') {
+      return res.status(404).json({
+        success: false,
+        error: 'Agent not found'
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update agent'
     });
   }
 });

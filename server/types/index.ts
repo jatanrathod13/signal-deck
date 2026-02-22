@@ -118,6 +118,9 @@ export interface AgentConfig {
 export type TaskStatus = 'pending' | 'blocked' | 'processing' | 'completed' | 'failed' | 'cancelled';
 export type TaskErrorType = 'tool_error' | 'model_error' | 'timeout' | 'validation_error' | 'unknown_error';
 export type TaskExecutionMode = 'tool_loop' | 'claude_cli';
+export type ScheduleRunStatus = 'never' | 'running' | 'succeeded' | 'failed';
+export type WebhookDirection = 'inbound' | 'outbound';
+export type WebhookStatus = 'pending' | 'delivered' | 'failed' | 'disabled';
 export type OrchestrationExecutionStrategy = 'sequential' | 'parallel';
 export type PlanStatus = 'draft' | 'active' | 'completed' | 'failed' | 'cancelled';
 export type PlanStepStatus = 'pending' | 'blocked' | 'running' | 'completed' | 'failed' | 'skipped';
@@ -307,6 +310,48 @@ export interface Task {
   errorType?: TaskErrorType;
 }
 
+export interface ScheduleDefinition {
+  id: string;
+  workspaceId: string;
+  name: string;
+  cronExpression: string;
+  timezone: string;
+  payload: Record<string, unknown>;
+  enabled: boolean;
+  retryLimit: number;
+  retryBackoffSeconds: number;
+  lastRunAt?: Date;
+  nextRunAt?: Date;
+  lastRunStatus: ScheduleRunStatus;
+  createdByUserId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WebhookDefinition {
+  id: string;
+  workspaceId: string;
+  direction: WebhookDirection;
+  eventName: string;
+  targetUrl?: string;
+  status: WebhookStatus;
+  headers?: Record<string, string>;
+  payload?: Record<string, unknown>;
+  signature?: string;
+  responseStatus?: number;
+  responseBody?: string;
+  attemptCount: number;
+  maxAttempts: number;
+  nextAttemptAt?: Date;
+  lastAttemptAt?: Date;
+  deliveredAt?: Date;
+  error?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -450,6 +495,28 @@ export interface ErrorEvent {
   timestamp: Date;
 }
 
+export interface ScheduleTriggeredEvent {
+  scheduleId: string;
+  scheduleName: string;
+  status: 'succeeded' | 'failed';
+  taskId?: string;
+  error?: string;
+  nextRunAt?: Date;
+  timestamp: Date;
+}
+
+export interface WebhookDeliveryEvent {
+  webhookId: string;
+  eventName: string;
+  direction: WebhookDirection;
+  status: WebhookStatus;
+  attemptCount: number;
+  responseStatus?: number;
+  nextAttemptAt?: Date;
+  error?: string;
+  timestamp: Date;
+}
+
 // Socket events type definition
 export interface SocketEvents {
   // Server -> Client events
@@ -468,6 +535,8 @@ export interface SocketEvents {
     payload: Record<string, unknown>;
     timestamp: Date;
   };
+  'schedule-triggered': ScheduleTriggeredEvent;
+  'webhook-delivery': WebhookDeliveryEvent;
   'error': ErrorEvent;
 
   // Client -> Server events

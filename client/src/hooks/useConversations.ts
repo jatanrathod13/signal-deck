@@ -12,6 +12,7 @@ import {
   getConversationEvents,
   getConversations,
   getRun,
+  getRuns,
   submitConversationMessage,
   type CreateConversationData,
   type SubmitConversationMessageData,
@@ -61,6 +62,16 @@ export function useRun(runId: string): UseQueryResult<{ run: Run; events: RunEve
     queryFn: () => getRun(runId),
     enabled: !!runId,
     staleTime: 2_000
+  });
+}
+
+export function useRuns(status?: string, limit: number = 100): UseQueryResult<Run[]> {
+  return useQuery({
+    queryKey: ['runs', 'list', status, limit],
+    queryFn: () => getRuns(status, limit),
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true
   });
 }
 
