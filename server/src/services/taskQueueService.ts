@@ -5,13 +5,29 @@
 
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { Task, TaskStatus, TaskErrorType } from '../../types';
+import { Task, TaskStatus, TaskErrorType, TaskExecutionMode } from '../../types';
 import { emitTaskStatus } from './socketService';
 import { getTaskByIdempotencyKey, loadAllTasks, saveTask } from './taskPersistenceService';
 import { incrementMetric } from './metricsService';
 
 // Redis connection for BullMQ
 let redisConnection: Redis | null = null;
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+const DEFAULT_JOB_ATTEMPTS = parsePositiveInt(process.env.TASK_JOB_ATTEMPTS, 1);
+const DEFAULT_BACKOFF_DELAY_MS = parsePositiveInt(process.env.TASK_JOB_BACKOFF_DELAY_MS, 1000);
 
 /**
  * Get or create Redis connection
@@ -49,10 +65,10 @@ function getTaskQueue(): Queue {
     taskQueue = new Queue('agent-tasks', {
       connection: getRedisConnection(),
       defaultJobOptions: {
-        attempts: 3,
+        attempts: DEFAULT_JOB_ATTEMPTS,
         backoff: {
           type: 'exponential',
-          delay: 1000
+          delay: DEFAULT_BACKOFF_DELAY_MS
         },
         removeOnComplete: true,
         removeOnFail: false
@@ -75,7 +91,24 @@ export function setTaskQueue(queue: Queue): void {
 export async function bootstrapTaskStore(): Promise<void> {
   const persistedTasks = await loadAllTasks();
   for (const task of persistedTasks) {
+    let normalized = false;
+
+    if (task.status === 'processing' && typeof task.error === 'string' && task.error.trim().length > 0) {
+      task.status = 'failed';
+      task.updatedAt = new Date();
+      normalized = true;
+    }
+
+    if (task.status === 'completed' && (task.error || task.errorType)) {
+      delete task.error;
+      delete task.errorType;
+      normalized = true;
+    }
+
     taskStore.set(task.id, task);
+    if (normalized) {
+      persistTask(task);
+    }
   }
 }
 
@@ -89,13 +122,20 @@ function generateTaskId(): string {
 /**
  * Create a Task object from input parameters
  */
-function createTask(agentId: string, type: string, data: Record<string, unknown>, priority: number = 1): Task {
+function createTask(
+  agentId: string,
+  type: string,
+  data: Record<string, unknown>,
+  priority: number = 1,
+  executionMode?: TaskExecutionMode
+): Task {
   const now = new Date();
   return {
     id: generateTaskId(),
     agentId,
     type,
     data,
+    executionMode,
     status: 'pending',
     priority,
     createdAt: now,
@@ -130,6 +170,16 @@ export function updateTaskStatus(
 
   task.status = status;
   task.updatedAt = new Date();
+
+  if (status !== 'failed' && (!additionalUpdates || !Object.prototype.hasOwnProperty.call(additionalUpdates, 'error'))) {
+    delete task.error;
+  }
+  if (status !== 'failed' && (!additionalUpdates || !Object.prototype.hasOwnProperty.call(additionalUpdates, 'errorType'))) {
+    delete task.errorType;
+  }
+  if (status !== 'completed' && (!additionalUpdates || !Object.prototype.hasOwnProperty.call(additionalUpdates, 'result'))) {
+    delete task.result;
+  }
 
   if (additionalUpdates) {
     Object.assign(task, additionalUpdates);
@@ -195,7 +245,7 @@ export async function submitTask(task: Task): Promise<string> {
       childTaskIds: task.childTaskIds ?? [],
       dependsOnTaskIds: task.dependsOnTaskIds ?? []
     }
-    : createTask(task.agentId, task.type, task.data, task.priority);
+    : createTask(task.agentId, task.type, task.data, task.priority, task.executionMode);
 
   if (task.idempotencyKey) {
     newTask.idempotencyKey = task.idempotencyKey;
@@ -211,6 +261,10 @@ export async function submitTask(task: Task): Promise<string> {
 
   if (task.stepId) {
     newTask.stepId = task.stepId;
+  }
+
+  if (task.executionMode) {
+    newTask.executionMode = task.executionMode;
   }
 
   if (task.metadata) {
@@ -319,7 +373,7 @@ export async function retryTask(taskId: string): Promise<string> {
     throw new Error('Task can only be retried if it is failed or cancelled');
   }
 
-  const newTask = createTask(task.agentId, task.type, task.data, task.priority);
+  const newTask = createTask(task.agentId, task.type, task.data, task.priority, task.executionMode);
   newTask.parentTaskId = task.parentTaskId;
   newTask.planId = task.planId;
   newTask.stepId = task.stepId;

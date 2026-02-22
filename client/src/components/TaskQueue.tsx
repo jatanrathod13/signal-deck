@@ -12,13 +12,15 @@ import {
   PlayCircle,
   Plus,
   RefreshCw,
+  Search,
   Timer,
   XCircle,
 } from 'lucide-react';
 import { useAgents } from '../hooks/useAgents';
 import { useSocket } from '../hooks/useSocket';
 import { useSubmitTask, useTasks } from '../hooks/useTasks';
-import type { TaskStatus } from '../types';
+import { useTaskStore } from '../stores/taskStore';
+import type { TaskExecutionMode, TaskStatus } from '../types';
 import { cn } from '../lib/utils';
 import { TaskItem } from './TaskItem';
 
@@ -31,16 +33,20 @@ const statusGroups: { label: string; value: TaskStatus | 'all'; icon: React.Elem
   { label: 'Failed', value: 'failed', icon: XCircle, color: 'text-rose-200' },
   { label: 'Cancelled', value: 'cancelled', icon: Ban, color: 'text-slate-400' },
 ];
+const MAX_VISIBLE_PER_GROUP = 20;
 
 interface TaskQueueProps {
   className?: string;
 }
 
 export function TaskQueue({ className }: TaskQueueProps) {
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | 'all'>('processing');
   const [showSubmitForm, setShowSubmitForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [agentId, setAgentId] = useState('');
   const [taskType, setTaskType] = useState('');
+  const [executionMode, setExecutionMode] = useState<TaskExecutionMode>('tool_loop');
   const [taskData, setTaskData] = useState('{}');
   const [priority, setPriority] = useState(1);
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -63,9 +69,8 @@ export function TaskQueue({ className }: TaskQueueProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const { data: tasks, isLoading, isError, error, refetch } = useTasks(
-    statusFilter === 'all' ? undefined : statusFilter
-  );
+  const { data: tasks, isLoading, isError, error, refetch } = useTasks();
+  const setTasks = useTaskStore((state) => state.setTasks);
   const { data: agents } = useAgents();
   const submitTask = useSubmitTask();
   const { isConnected } = useSocket();
@@ -87,12 +92,14 @@ export function TaskQueue({ className }: TaskQueueProps) {
         agentId,
         type: taskType,
         data: parsedData,
+        executionMode,
         priority,
       });
 
       setShowSubmitForm(false);
       setAgentId('');
       setTaskType('');
+      setExecutionMode('tool_loop');
       setTaskData('{}');
       setPriority(1);
     } catch {
@@ -104,17 +111,104 @@ export function TaskQueue({ className }: TaskQueueProps) {
     setShowSubmitForm(false);
     setAgentId('');
     setTaskType('');
+    setExecutionMode('tool_loop');
     setTaskData('{}');
     setPriority(1);
     setJsonError(null);
   };
 
-  const tasksList = Array.isArray(tasks) ? tasks : [];
+  const loadClaudeTaskPreset = () => {
+    const preferredAgent = agentId || agents?.[0]?.id || '';
+    setAgentId(preferredAgent);
+    setTaskType('claude-cli-task');
+    setExecutionMode('claude_cli');
+    setTaskData(
+      JSON.stringify(
+        {
+          prompt: 'Analyze the codebase and implement the requested task with tests.',
+          claude: {
+            args: [],
+            timeoutMs: 900000
+          }
+        },
+        null,
+        2
+      )
+    );
+  };
+
+  const loadParallelTeamPreset = () => {
+    const availableAgentIds = (agents ?? []).map((agent) => agent.id);
+    const coordinatorAgentId = agentId || availableAgentIds[0] || '';
+
+    setAgentId(coordinatorAgentId);
+    setTaskType('orchestrate-team');
+    setExecutionMode('claude_cli');
+    setTaskData(
+      JSON.stringify(
+        {
+          objective: 'Research, plan, implement, and verify the requested feature.',
+          teamAgentIds: availableAgentIds.length > 0 ? availableAgentIds : [coordinatorAgentId].filter(Boolean),
+          executionStrategy: 'parallel',
+          maxSteps: Math.max(3, availableAgentIds.length || 1),
+          stepPrompts: [
+            'Investigate requirements and constraints, then summarize implementation plan.',
+            'Implement the solution and update related code paths.',
+            'Run validations/tests, fix issues, and provide final summary.'
+          ]
+        },
+        null,
+        2
+      )
+    );
+  };
+
+  const tasksList = useMemo(
+    () => (Array.isArray(tasks) ? [...tasks] : []).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [tasks]
+  );
+
+  useEffect(() => {
+    if (!Array.isArray(tasks)) {
+      return;
+    }
+
+    setTasks(tasks);
+  }, [setTasks, tasks]);
+
+  const filteredTasks = useMemo(() => {
+    const byStatus = statusFilter === 'all'
+      ? tasksList
+      : tasksList.filter((task) => task.status === statusFilter);
+
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (!trimmed) {
+      return byStatus;
+    }
+
+    return byStatus.filter((task) => {
+      const searchable = [
+        task.id,
+        task.type,
+        task.agentId,
+        task.status,
+        task.planId,
+        task.stepId,
+        task.executionMode,
+        typeof task.data?.prompt === 'string' ? task.data.prompt : ''
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchable.includes(trimmed);
+    });
+  }, [searchQuery, statusFilter, tasksList]);
 
   const groupedTasks = useMemo(() => {
-    if (tasksList.length === 0) return null;
+    if (filteredTasks.length === 0) return null;
 
-    const groups: Record<TaskStatus, typeof tasksList> = {
+    const groups: Record<TaskStatus, typeof filteredTasks> = {
       pending: [],
       blocked: [],
       processing: [],
@@ -123,29 +217,43 @@ export function TaskQueue({ className }: TaskQueueProps) {
       cancelled: [],
     };
 
-    tasksList.forEach((task) => {
+    filteredTasks.forEach((task) => {
       if (groups[task.status]) groups[task.status].push(task);
     });
 
     return groups;
-  }, [tasksList]);
+  }, [filteredTasks]);
 
   const statusCounts = useMemo(() => {
-    if (!groupedTasks) {
-      return { pending: 0, blocked: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 };
-    }
-
-    return {
-      pending: groupedTasks.pending.length,
-      blocked: groupedTasks.blocked.length,
-      processing: groupedTasks.processing.length,
-      completed: groupedTasks.completed.length,
-      failed: groupedTasks.failed.length,
-      cancelled: groupedTasks.cancelled.length,
-    };
-  }, [groupedTasks]);
+    const counts = { pending: 0, blocked: 0, processing: 0, completed: 0, failed: 0, cancelled: 0 };
+    tasksList.forEach((task) => {
+      counts[task.status] += 1;
+    });
+    return counts;
+  }, [tasksList]);
 
   const totalCount = tasksList.length;
+  const visibleCount = filteredTasks.length;
+
+  const toggleGroupExpansion = (group: TaskStatus) => {
+    setExpandedGroups((previous) => ({
+      ...previous,
+      [group]: !previous[group]
+    }));
+  };
+
+  const getVisibleGroupTasks = (group: TaskStatus) => {
+    if (!groupedTasks) {
+      return [];
+    }
+
+    const tasksForGroup = groupedTasks[group];
+    if (expandedGroups[group] || statusFilter !== 'all') {
+      return tasksForGroup;
+    }
+
+    return tasksForGroup.slice(0, MAX_VISIBLE_PER_GROUP);
+  };
 
   return (
     <section className={cn('space-y-4', className)}>
@@ -193,9 +301,41 @@ export function TaskQueue({ className }: TaskQueueProps) {
         </div>
       </header>
 
+      <div className="glass-panel p-3">
+        <label htmlFor="task-search" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+          Search Tasks
+        </label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+          <input
+            id="task-search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Filter by id, type, agent, plan, mode, prompt..."
+            className="input-field pl-9"
+          />
+        </div>
+      </div>
+
       {showSubmitForm && (
         <div className="glass-panel p-4">
           <h3 className="panel-title mb-3 text-sm">Submit Task</h3>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={loadClaudeTaskPreset}
+              className="btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold"
+            >
+              Claude Preset
+            </button>
+            <button
+              type="button"
+              onClick={loadParallelTeamPreset}
+              className="btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold"
+            >
+              Parallel Team Preset
+            </button>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
@@ -231,6 +371,21 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   required
                   className="input-field"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="executionMode" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                  Execution Mode
+                </label>
+                <select
+                  id="executionMode"
+                  value={executionMode}
+                  onChange={(e) => setExecutionMode(e.target.value as TaskExecutionMode)}
+                  className="input-field"
+                >
+                  <option value="tool_loop">Tool Loop (AI SDK)</option>
+                  <option value="claude_cli">Claude CLI (local)</option>
+                </select>
               </div>
 
               <div>
@@ -335,99 +490,72 @@ export function TaskQueue({ className }: TaskQueueProps) {
         </div>
       )}
 
-      {!isLoading && !isError && totalCount === 0 && (
+      {!isLoading && !isError && visibleCount === 0 && (
         <div className="glass-panel p-8 text-center">
           <ListChecks className="mx-auto mb-3 h-10 w-10 text-slate-500" />
-          <p className="font-medium text-slate-200">No tasks available</p>
-          <p className="mt-1 text-sm text-slate-400">Submit a task to start execution.</p>
+          <p className="font-medium text-slate-200">
+            {searchQuery ? 'No matching tasks' : statusFilter === 'all' ? 'No tasks available' : `No ${statusFilter} tasks`}
+          </p>
+          <p className="mt-1 text-sm text-slate-400">
+            {searchQuery ? 'Try a different search query.' : totalCount === 0 ? 'Submit a task to start execution.' : 'Try another status filter.'}
+          </p>
         </div>
       )}
 
-      {!isLoading && !isError && totalCount > 0 && (
+      {!isLoading && !isError && visibleCount > 0 && (
         <div className="space-y-4">
           {statusFilter === 'all' ? (
             <>
-              {groupedTasks && groupedTasks.processing.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-cyan-200">
-                    Processing ({groupedTasks.processing.length})
-                  </h3>
-                  <div className="stagger-list space-y-2">
-                    {groupedTasks.processing.map((task, index) => (
-                      <TaskItem key={task.id} task={task} position={index + 1} isPolePosition={index === 0} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {(['processing', 'pending', 'blocked', 'failed', 'completed', 'cancelled'] as TaskStatus[]).map((group) => {
+                if (!groupedTasks || groupedTasks[group].length === 0) {
+                  return null;
+                }
 
-              {groupedTasks && groupedTasks.pending.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-amber-200">
-                    Pending ({groupedTasks.pending.length})
-                  </h3>
-                  <div className="stagger-list space-y-2">
-                    {groupedTasks.pending.map((task, index) => (
-                      <TaskItem key={task.id} task={task} position={index + 1} />
-                    ))}
-                  </div>
-                </div>
-              )}
+                const visibleTasks = getVisibleGroupTasks(group);
+                const hiddenCount = groupedTasks[group].length - visibleTasks.length;
+                const titleColor = group === 'processing'
+                  ? 'text-cyan-200'
+                  : group === 'pending'
+                    ? 'text-amber-200'
+                    : group === 'blocked'
+                      ? 'text-orange-200'
+                      : group === 'failed'
+                        ? 'text-rose-200'
+                        : group === 'completed'
+                          ? 'text-emerald-200'
+                          : 'text-slate-400';
 
-              {groupedTasks && groupedTasks.blocked.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-orange-200">
-                    Blocked ({groupedTasks.blocked.length})
-                  </h3>
-                  <div className="stagger-list space-y-2">
-                    {groupedTasks.blocked.map((task) => (
-                      <TaskItem key={task.id} task={task} />
-                    ))}
+                return (
+                  <div key={group} className="space-y-2">
+                    <h3 className={cn('text-xs font-semibold uppercase tracking-wider', titleColor)}>
+                      {group} ({groupedTasks[group].length})
+                    </h3>
+                    <div className="stagger-list space-y-2">
+                      {visibleTasks.map((task, index) => (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          position={index + 1}
+                          isPolePosition={group === 'processing' && index === 0}
+                        />
+                      ))}
+                    </div>
+                    {hiddenCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => toggleGroupExpansion(group)}
+                        className="btn-ghost rounded-lg px-3 py-1 text-xs font-semibold"
+                      >
+                        {expandedGroups[group] ? 'Show less' : `Show ${hiddenCount} more`}
+                      </button>
+                    )}
                   </div>
-                </div>
-              )}
-
-              {groupedTasks && groupedTasks.completed.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-emerald-200">
-                    Completed ({groupedTasks.completed.length})
-                  </h3>
-                  <div className="stagger-list space-y-2">
-                    {groupedTasks.completed.map((task) => (
-                      <TaskItem key={task.id} task={task} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {groupedTasks && groupedTasks.failed.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-rose-200">
-                    Failed ({groupedTasks.failed.length})
-                  </h3>
-                  <div className="stagger-list space-y-2">
-                    {groupedTasks.failed.map((task) => (
-                      <TaskItem key={task.id} task={task} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {groupedTasks && groupedTasks.cancelled.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Cancelled ({groupedTasks.cancelled.length})
-                  </h3>
-                  <div className="stagger-list space-y-2">
-                    {groupedTasks.cancelled.map((task) => (
-                      <TaskItem key={task.id} task={task} />
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })}
             </>
           ) : (
             <div className="stagger-list space-y-2">
-              {tasksList.map((task, index) => (
+              {filteredTasks.map((task, index) => (
                 <TaskItem key={task.id} task={task} position={index + 1} />
               ))}
             </div>

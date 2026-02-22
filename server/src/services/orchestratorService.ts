@@ -3,7 +3,13 @@
  * Coordinates plan execution and parent-child task flow.
  */
 
-import { Plan, OrchestrationSummary, Task } from '../../types';
+import {
+  OrchestrationExecutionStrategy,
+  OrchestrationSummary,
+  Plan,
+  Task,
+  TaskExecutionMode
+} from '../../types';
 import { createPlan, getPlan, getReadySteps, updatePlanStatus, updateStepStatus } from './planService';
 import { submitTask, getTask, linkChildTask } from './taskQueueService';
 
@@ -66,8 +72,9 @@ export function generateStepPromptsFromObjective(objective: string, maxSteps?: n
 
 function createSimpleStepPlan(
   objective: string,
-  defaultAgentId: string,
-  stepPrompts: string[]
+  agentIds: string[],
+  stepPrompts: string[],
+  executionStrategy: OrchestrationExecutionStrategy
 ): Array<{
   title: string;
   description: string;
@@ -76,17 +83,36 @@ function createSimpleStepPlan(
   taskData: Record<string, unknown>;
   dependsOnStepIds?: string[];
 }> {
+  const hasParallelExecution = executionStrategy === 'parallel';
+
   return stepPrompts.map((prompt, index) => ({
     title: `Step ${index + 1}`,
     description: prompt,
-    agentId: defaultAgentId,
+    agentId: agentIds[index % agentIds.length],
     taskType: 'orchestration-step',
     taskData: {
       prompt,
       objective,
       stepNumber: index + 1
-    }
+    },
+    dependsOnStepIds: hasParallelExecution ? [] : undefined
   }));
+}
+
+function normalizeExecutionStrategy(value?: string): OrchestrationExecutionStrategy {
+  return value === 'parallel' ? 'parallel' : 'sequential';
+}
+
+function resolveTeamAgentIds(defaultAgentId: string, teamAgentIds?: string[]): string[] {
+  const candidates = (teamAgentIds ?? [])
+    .map((agentId) => agentId.trim())
+    .filter((agentId) => agentId.length > 0);
+
+  if (candidates.length === 0) {
+    return [defaultAgentId];
+  }
+
+  return Array.from(new Set(candidates));
 }
 
 export async function createAndStartPlan(input: {
@@ -94,10 +120,19 @@ export async function createAndStartPlan(input: {
   defaultAgentId: string;
   stepPrompts?: string[];
   maxSteps?: number;
+  teamAgentIds?: string[];
+  executionStrategy?: OrchestrationExecutionStrategy;
+  executionMode?: TaskExecutionMode;
   conversationId?: string;
   runId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<OrchestrationSummary> {
+  const executionStrategy = normalizeExecutionStrategy(input.executionStrategy);
+  const teamAgentIds = resolveTeamAgentIds(input.defaultAgentId, input.teamAgentIds);
+  const parentTaskId = typeof input.metadata?.parentTaskId === 'string'
+    ? input.metadata.parentTaskId
+    : undefined;
+
   const prompts = input.stepPrompts && input.stepPrompts.length > 0
     ? input.stepPrompts
       .map((stepPrompt) => normalizePrompt(stepPrompt))
@@ -108,13 +143,20 @@ export async function createAndStartPlan(input: {
     throw new Error('Unable to create a plan without at least one valid step prompt');
   }
 
-  const steps = createSimpleStepPlan(input.objective, input.defaultAgentId, prompts);
+  const steps = createSimpleStepPlan(
+    input.objective,
+    teamAgentIds,
+    prompts,
+    executionStrategy
+  );
   const plan = await createPlan({
     objective: input.objective,
     metadata: {
       ...(input.metadata ?? {}),
       conversationId: input.conversationId,
-      runId: input.runId
+      runId: input.runId,
+      teamAgentIds,
+      executionStrategy
     },
     steps
   });
@@ -126,10 +168,12 @@ export async function createAndStartPlan(input: {
       agentId: step.agentId,
       type: step.taskType,
       data: step.taskData,
+      executionMode: input.executionMode,
       status: 'pending',
       priority: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
+      parentTaskId,
       planId: plan.id,
       stepId: step.id,
       metadata: {
@@ -145,8 +189,11 @@ export async function createAndStartPlan(input: {
 
   return {
     planId: plan.id,
+    ...(parentTaskId ? { rootTaskId: parentTaskId } : {}),
     totalSteps: plan.steps.length,
-    readySteps: readySteps.length
+    readySteps: readySteps.length,
+    executionStrategy,
+    teamAgentIds
   };
 }
 
@@ -170,6 +217,7 @@ export async function handleTaskCompletion(task: Task): Promise<void> {
       agentId: step.agentId,
       type: step.taskType,
       data: step.taskData,
+      executionMode: task.executionMode,
       status: 'pending',
       priority: 1,
       createdAt: new Date(),

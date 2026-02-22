@@ -57,10 +57,16 @@ export function emitTaskStatus(task: Task): void {
     taskId: task.id,
     status: task.status,
     agentId: task.agentId,
+    type: task.type,
+    priority: task.priority,
+    executionMode: task.executionMode,
+    parentTaskId: task.parentTaskId,
     planId: task.planId,
     stepId: task.stepId,
     runId: task.runId,
     conversationId: task.conversationId,
+    error: task.error,
+    errorType: task.errorType,
     timestamp: new Date()
   });
 }
@@ -78,6 +84,28 @@ export function emitTaskCompleted(task: Task): void {
   io.emit('task-completed', {
     taskId: task.id,
     result: task.result,
+    timestamp: new Date()
+  });
+}
+
+/**
+ * Emit task log chunk for live execution visibility.
+ */
+export function emitTaskLog(
+  taskId: string,
+  agentId: string,
+  stream: 'stdout' | 'stderr' | 'system',
+  chunk: string
+): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('task-log', {
+    taskId,
+    agentId,
+    stream,
+    chunk,
     timestamp: new Date()
   });
 }

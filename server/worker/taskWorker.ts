@@ -5,7 +5,7 @@
 
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
-import { Task, TaskErrorType, TaskStatus } from '../types';
+import { OrchestrationExecutionStrategy, Task, TaskErrorType, TaskExecutionMode, TaskStatus } from '../types';
 import { enqueueTaskById, getAllTasks, getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
@@ -20,7 +20,41 @@ let redisConnection: Redis | null = null;
 let taskWorker: Worker | null = null;
 
 // Default concurrency limit
-const DEFAULT_CONCURRENCY = 10;
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+const DEFAULT_CONCURRENCY = parsePositiveInt(process.env.WORKER_CONCURRENCY, 10);
+const DEFAULT_RATE_LIMIT = parsePositiveInt(process.env.WORKER_RATE_LIMIT, 10);
+
+function normalizeExecutionMode(value: unknown): TaskExecutionMode | undefined {
+  if (value === 'claude_cli' || value === 'tool_loop') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function normalizeExecutionStrategy(value: unknown, fallback: OrchestrationExecutionStrategy): OrchestrationExecutionStrategy {
+  if (value === 'parallel' || value === 'sequential') {
+    return value;
+  }
+
+  return fallback;
+}
+
+function isOrchestrationTask(taskType: string): boolean {
+  return taskType === 'orchestrate' || taskType === 'orchestrate-team';
+}
 
 /**
  * Get or create Redis connection for the worker
@@ -143,7 +177,7 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
       throw new Error('Task not found during processing');
     }
 
-    const resultData = currentTask.type === 'orchestrate'
+    const resultData = isOrchestrationTask(currentTask.type)
       ? await runOrchestrationTask(currentTask)
       : await executeAgentTask(currentTask);
 
@@ -256,6 +290,9 @@ interface OrchestrationTaskData {
   defaultAgentId?: unknown;
   stepPrompts?: unknown;
   maxSteps?: unknown;
+  teamAgentIds?: unknown;
+  executionStrategy?: unknown;
+  executionMode?: unknown;
   metadata?: unknown;
 }
 
@@ -277,8 +314,16 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
   const stepPrompts = Array.isArray(taskData.stepPrompts)
     ? taskData.stepPrompts.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     : undefined;
+  const teamAgentIds = Array.isArray(taskData.teamAgentIds)
+    ? taskData.teamAgentIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : undefined;
 
   const maxSteps = typeof taskData.maxSteps === 'number' ? taskData.maxSteps : undefined;
+  const executionStrategy = normalizeExecutionStrategy(
+    taskData.executionStrategy,
+    task.type === 'orchestrate-team' ? 'parallel' : 'sequential'
+  );
+  const executionMode = normalizeExecutionMode(taskData.executionMode) ?? task.executionMode;
   const metadata = typeof taskData.metadata === 'object' && taskData.metadata !== null
     ? taskData.metadata as Record<string, unknown>
     : undefined;
@@ -288,6 +333,9 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
     defaultAgentId,
     stepPrompts,
     maxSteps,
+    teamAgentIds,
+    executionStrategy,
+    executionMode,
     conversationId: task.conversationId,
     runId: task.runId,
     metadata: {
@@ -297,8 +345,10 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
   });
 
   return {
-    mode: 'orchestrate',
+    mode: task.type,
     objective,
+    executionStrategy,
+    teamAgentIds: summary.teamAgentIds,
     ...summary
   };
 }
@@ -327,7 +377,7 @@ export function startWorker(): void {
       connection,
       concurrency: DEFAULT_CONCURRENCY,
       limiter: {
-        max: 10,
+        max: DEFAULT_RATE_LIMIT,
         duration: 1000
       }
     }

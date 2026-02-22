@@ -8,11 +8,28 @@ import { useDeployAgent } from '../hooks/useAgents';
 import { cn } from '../lib/utils';
 
 const agentTypes = [
+  { value: 'claude-cli-runner', label: 'Claude CLI Runner' },
   { value: 'worker', label: 'Worker Agent' },
   { value: 'coordinator', label: 'Coordinator Agent' },
   { value: 'monitor', label: 'Monitor Agent' },
   { value: 'processor', label: 'Processor Agent' },
 ];
+
+const claudeRunnerConfigTemplate = JSON.stringify(
+  {
+    executionMode: 'claude_cli',
+    claude: {
+      command: 'claude',
+      baseArgs: [],
+      promptFlag: '-p',
+      timeoutMs: 900000,
+      workingDirectory: '.',
+      allowedCommands: ['claude']
+    }
+  },
+  null,
+  2
+);
 
 interface DeployFormData {
   name: string;
@@ -96,7 +113,17 @@ export function AgentDeploy({ className, onSuccess }: AgentDeployProps) {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      if (name === 'type' && value === 'claude-cli-runner') {
+        return {
+          ...prev,
+          type: value,
+          config: prev.config === '{}' ? claudeRunnerConfigTemplate : prev.config
+        };
+      }
+
+      return { ...prev, [name]: value };
+    });
 
     if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [name]: undefined }));

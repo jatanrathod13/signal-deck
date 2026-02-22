@@ -11,6 +11,7 @@ import { useTaskStore } from '../stores/taskStore';
 import type {
   AgentStatusEvent,
   TaskStatusEvent,
+  TaskLogEvent,
   ErrorEvent,
   TaskCompletedEvent,
   Agent,
@@ -43,6 +44,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const updateAgent = useAgentStore((state) => state.updateAgent);
   const addAgent = useAgentStore((state) => state.addAgent);
   const updateTask = useTaskStore((state) => state.updateTask);
+  const appendTaskLog = useTaskStore((state) => state.appendTaskLog);
   const addTask = useTaskStore((state) => state.addTask);
 
   const appendRunEvent = useConversationStore((state) => state.appendRunEvent);
@@ -96,34 +98,90 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
     socket.on('task-status', (data: TaskStatusEvent) => {
       const existingTask = useTaskStore.getState().getTask(data.taskId);
+      const eventTimestamp = new Date(data.timestamp);
 
       if (existingTask) {
+        const currentTimestamp = new Date(existingTask.updatedAt);
+        if (eventTimestamp.getTime() < currentTimestamp.getTime()) {
+          return;
+        }
+
         updateTask(data.taskId, {
           status: data.status,
-          updatedAt: new Date(data.timestamp)
+          type: data.type ?? existingTask.type,
+          priority: data.priority ?? existingTask.priority,
+          executionMode: data.executionMode ?? existingTask.executionMode,
+          parentTaskId: data.parentTaskId ?? existingTask.parentTaskId,
+          agentId: data.agentId ?? existingTask.agentId,
+          planId: data.planId ?? existingTask.planId,
+          stepId: data.stepId ?? existingTask.stepId,
+          runId: data.runId ?? existingTask.runId,
+          conversationId: data.conversationId ?? existingTask.conversationId,
+          error: data.error,
+          errorType: data.errorType,
+          updatedAt: eventTimestamp
         });
       } else {
         const newTask: Task = {
           id: data.taskId,
           agentId: data.agentId || '',
-          type: 'unknown',
+          type: data.type || 'unknown',
           data: {},
           status: data.status,
-          priority: 0,
-          createdAt: new Date(data.timestamp),
-          updatedAt: new Date(data.timestamp),
+          priority: data.priority ?? 0,
+          executionMode: data.executionMode,
+          parentTaskId: data.parentTaskId,
+          planId: data.planId,
+          stepId: data.stepId,
+          createdAt: eventTimestamp,
+          updatedAt: eventTimestamp,
           conversationId: data.conversationId,
-          runId: data.runId
+          runId: data.runId,
+          error: data.error,
+          errorType: data.errorType
         };
         addTask(newTask);
       }
     });
 
+    socket.on('task-log', (data: TaskLogEvent) => {
+      const existingTask = useTaskStore.getState().getTask(data.taskId);
+      const logTimestamp = new Date(data.timestamp);
+      if (!existingTask) {
+        const seedTask: Task = {
+          id: data.taskId,
+          agentId: data.agentId,
+          type: 'running-task',
+          data: {},
+          status: 'processing',
+          priority: 0,
+          createdAt: logTimestamp,
+          updatedAt: logTimestamp,
+          liveOutput: '',
+          liveErrorOutput: ''
+        };
+        addTask(seedTask);
+      } else {
+        const existingTimestamp = new Date(existingTask.updatedAt);
+        if (logTimestamp.getTime() < existingTimestamp.getTime()) {
+          return;
+        }
+      }
+
+      appendTaskLog(data.taskId, data.stream, data.chunk, logTimestamp);
+      updateTask(data.taskId, {
+        updatedAt: logTimestamp
+      });
+    });
+
     socket.on('task-completed', (data: TaskCompletedEvent) => {
+      const completedTimestamp = new Date(data.timestamp);
       updateTask(data.taskId, {
         status: 'completed',
         result: data.result,
-        updatedAt: new Date(data.timestamp)
+        error: undefined,
+        errorType: undefined,
+        updatedAt: completedTimestamp
       });
     });
 
@@ -173,7 +231,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socketRef.current = null;
       setIsConnected(false);
     };
-  }, [updateAgent, addAgent, updateTask, addTask, appendRunEvent, addMessage, upsertRun]);
+  }, [updateAgent, addAgent, updateTask, appendTaskLog, addTask, appendRunEvent, addMessage, upsertRun]);
 
   const value = useMemo(() => ({ socket: socketRef.current, isConnected }), [isConnected]);
 
