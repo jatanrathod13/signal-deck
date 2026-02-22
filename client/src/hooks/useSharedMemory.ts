@@ -42,7 +42,7 @@ export function useMemory(key: string): UseQueryResult<SharedMemoryValue | null>
 /**
  * Fetch all memory keys with caching
  */
-export function useListMemory(): UseQueryResult<{ key: string; value: string }[]> {
+export function useListMemory(): UseQueryResult<{ key: string; value: string | null }[]> {
   return useQuery({
     queryKey: memoryKeys.list(),
     queryFn: listMemory,
@@ -91,7 +91,7 @@ export function useDeleteMemory(): UseMutationResult<boolean, Error, string> {
 // ============================================
 
 export type UseMemoryResult = UseQueryResult<SharedMemoryValue | null>;
-export type UseListMemoryResult = UseQueryResult<{ key: string; value: string }[]>;
+export type UseListMemoryResult = UseQueryResult<{ key: string; value: string | null }[]>;
 export type UseSetMemoryVariables = SetMemoryData;
 export type UseSetMemoryResult = UseMutationResult<void, Error, SetMemoryData>;
 export type UseDeleteMemoryVariables = string;

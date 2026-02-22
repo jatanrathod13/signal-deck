@@ -69,12 +69,19 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCompletionAnimation, setShowCompletionAnimation] = useState(false);
   const [elapsed, setElapsed] = useState('00:00.0');
+  const storeTask = useTaskStore((state) => state.getTask(task.id));
+  const currentTask = storeTask || task;
 
   useEffect(() => {
-    if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled' || task.status === 'blocked') {
-      const endTime = (task as { completedAt?: string }).completedAt || task.updatedAt;
-      if (endTime && task.createdAt) {
-        const elapsedMs = new Date(endTime).getTime() - new Date(task.createdAt).getTime();
+    if (
+      currentTask.status === 'completed' ||
+      currentTask.status === 'failed' ||
+      currentTask.status === 'cancelled' ||
+      currentTask.status === 'blocked'
+    ) {
+      const endTime = (currentTask as { completedAt?: string }).completedAt || currentTask.updatedAt;
+      if (endTime && currentTask.createdAt) {
+        const elapsedMs = new Date(endTime).getTime() - new Date(currentTask.createdAt).getTime();
         const seconds = Math.floor(elapsedMs / 1000);
         const ms = Math.floor((elapsedMs % 1000) / 100);
         const minutes = Math.floor(seconds / 60);
@@ -84,9 +91,9 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
       }
     }
 
-    if (task.status === 'processing') {
+    if (currentTask.status === 'processing') {
       const interval = setInterval(() => {
-        const elapsedMs = Date.now() - new Date(task.createdAt).getTime();
+        const elapsedMs = Date.now() - new Date(currentTask.createdAt).getTime();
         const seconds = Math.floor(elapsedMs / 1000);
         const ms = Math.floor((elapsedMs % 1000) / 100);
         const minutes = Math.floor(seconds / 60);
@@ -97,10 +104,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
     }
 
     setElapsed('--:--.-');
-  }, [task.status, task.updatedAt, task.createdAt]);
-
-  const storeTask = useTaskStore((state) => state.getTask(task.id));
-  const currentTask = storeTask || task;
+  }, [currentTask.status, currentTask.updatedAt, currentTask.createdAt]);
 
   useEffect(() => {
     if (task.status !== 'completed' && currentTask.status === 'completed') {

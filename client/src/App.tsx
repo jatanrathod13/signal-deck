@@ -4,7 +4,7 @@
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Dashboard } from './components';
-import { useSocket } from './hooks/useSocket';
+import { SocketProvider } from './hooks/useSocket';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -18,12 +18,11 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  // Initialize socket connection on app load
-  useSocket();
-
   return (
     <QueryClientProvider client={queryClient}>
-      <Dashboard />
+      <SocketProvider>
+        <Dashboard />
+      </SocketProvider>
     </QueryClientProvider>
   );
 }
