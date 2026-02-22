@@ -447,5 +447,35 @@ export async function closeTaskQueue(): Promise<void> {
   taskStore.clear();
 }
 
+export async function getTaskQueueHealth(): Promise<{
+  ok: boolean;
+  detail: string;
+  waiting: number;
+  active: number;
+  failed: number;
+}> {
+  try {
+    const queue = getTaskQueue();
+    await queue.waitUntilReady();
+    const counts = await queue.getJobCounts('waiting', 'active', 'failed');
+
+    return {
+      ok: true,
+      detail: 'reachable',
+      waiting: counts.waiting ?? 0,
+      active: counts.active ?? 0,
+      failed: counts.failed ?? 0
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: error instanceof Error ? error.message : 'Queue unavailable',
+      waiting: 0,
+      active: 0,
+      failed: 0
+    };
+  }
+}
+
 // Export the queue for external worker usage
 export { taskQueue };

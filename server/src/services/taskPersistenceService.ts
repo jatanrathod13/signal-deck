@@ -5,6 +5,13 @@
 
 import { Task } from '../../types';
 import { redis } from '../../config/redis';
+import {
+  deleteTaskFromSupabase,
+  getTaskIdByIdempotencyKeyFromSupabase,
+  isSupabasePersistenceEnabled,
+  loadTasksFromSupabase,
+  saveTaskToSupabase
+} from './supabasePersistenceService';
 
 const TASK_KEY_PREFIX = 'task:';
 const TASK_INDEX_KEY = 'tasks:index';
@@ -49,6 +56,15 @@ function hasSmembers(
 }
 
 export async function saveTask(task: Task): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      await saveTaskToSupabase(task);
+      return;
+    } catch (error) {
+      console.warn('[TaskPersistence] Supabase save failed, falling back to Redis:', error);
+    }
+  }
+
   try {
     if (!hasPipeline(redis)) {
       return;
@@ -67,6 +83,15 @@ export async function saveTask(task: Task): Promise<void> {
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      await deleteTaskFromSupabase(taskId);
+      return;
+    } catch (error) {
+      console.warn('[TaskPersistence] Supabase delete failed, falling back to Redis:', error);
+    }
+  }
+
   try {
     if (!hasPipeline(redis)) {
       return;
@@ -82,6 +107,14 @@ export async function deleteTask(taskId: string): Promise<void> {
 }
 
 export async function getTaskByIdempotencyKey(idempotencyKey: string): Promise<string | null> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      return await getTaskIdByIdempotencyKeyFromSupabase(idempotencyKey);
+    } catch (error) {
+      console.warn('[TaskPersistence] Supabase idempotency lookup failed, falling back to Redis:', error);
+    }
+  }
+
   try {
     if (!hasGet(redis)) {
       return null;
@@ -95,6 +128,14 @@ export async function getTaskByIdempotencyKey(idempotencyKey: string): Promise<s
 }
 
 export async function loadAllTasks(): Promise<Task[]> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      return await loadTasksFromSupabase();
+    } catch (error) {
+      console.warn('[TaskPersistence] Supabase task load failed, falling back to Redis:', error);
+    }
+  }
+
   try {
     if (!hasSmembers(redis) || !hasPipeline(redis)) {
       return [];
