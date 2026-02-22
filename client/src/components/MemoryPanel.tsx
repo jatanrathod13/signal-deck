@@ -2,7 +2,7 @@
  * MemoryPanel Component
  * Shared memory management UI with key-value listing, adding, and deleting
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Clock,
@@ -20,7 +20,7 @@ import { cn } from '../lib/utils';
 
 interface MemoryEntry {
   key: string;
-  value: string;
+  value: string | null;
 }
 
 interface MemoryPanelProps {
@@ -31,6 +31,7 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedValue, setSelectedValue] = useState<string | null>(null);
+  const selectedRequestIdRef = useRef(0);
 
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
@@ -63,10 +64,14 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
 
   const fetchSelectedValue = useCallback(
     async (key: string) => {
+      const requestId = ++selectedRequestIdRef.current;
       setIsLoadingValue(true);
       setSelectedKey(key);
       try {
         const data = await getMemory(key);
+        if (selectedRequestIdRef.current !== requestId) {
+          return;
+        }
         if (data) {
           setSelectedValue(String(data.value));
         } else {
@@ -74,10 +79,15 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
           setSelectedValue(entry?.value || '');
         }
       } catch (_err) {
+        if (selectedRequestIdRef.current !== requestId) {
+          return;
+        }
         const entry = entries.find((e) => e.key === key);
         setSelectedValue(entry?.value || '');
       } finally {
-        setIsLoadingValue(false);
+        if (selectedRequestIdRef.current === requestId) {
+          setIsLoadingValue(false);
+        }
       }
     },
     [entries]
@@ -126,8 +136,10 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
       setSuccessMessage(`Entry "${key}" deleted`);
 
       if (selectedKey === key) {
+        selectedRequestIdRef.current += 1;
         setSelectedKey(null);
         setSelectedValue(null);
+        setIsLoadingValue(false);
       }
 
       await fetchMemory();
@@ -138,9 +150,11 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
   };
 
   const entriesList = Array.isArray(entries) ? entries : [];
-  const filteredEntries = entriesList.filter((entry) =>
-    entry.key.toLowerCase().includes(filterText.toLowerCase())
-  );
+  const normalizedFilter = filterText.toLowerCase();
+  const filteredEntries = entriesList.filter((entry) => {
+    const key = typeof entry?.key === 'string' ? entry.key : '';
+    return key.toLowerCase().includes(normalizedFilter);
+  });
 
   return (
     <section className={cn('space-y-4', className)}>
@@ -270,7 +284,7 @@ export function MemoryPanel({ className }: MemoryPanelProps) {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm text-slate-100">{entry.key}</p>
-                    <p className="truncate text-xs text-slate-400">{entry.value}</p>
+                    <p className="truncate text-xs text-slate-400">{entry.value ?? '(null)'}</p>
                   </div>
                   <button
                     onClick={(e) => {
