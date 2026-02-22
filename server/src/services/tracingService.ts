@@ -50,6 +50,14 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4-turbo': { input: 10.0, output: 30.0 },
   'gpt-4': { input: 30.0, output: 60.0 },
+  'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+  'o1': { input: 15.0, output: 60.0 },
+  'o1-mini': { input: 3.0, output: 12.0 },
+  'o3-mini': { input: 1.1, output: 4.4 },
+  'openai/o4-mini': { input: 1.1, output: 4.4 },
+  'claude-3-opus': { input: 15.0, output: 75.0 },
+  'claude-3-sonnet': { input: 3.0, output: 15.0 },
+  'claude-3-haiku': { input: 0.25, output: 1.25 },
   'default': { input: 2.5, output: 10.0 }
 };
 
@@ -259,6 +267,12 @@ export function getTracingProviderOptions() {
  * Format trace result for response metadata
  */
 export function formatTraceMetadata(result: TraceResult): Record<string, unknown> {
+  // WP-11: Enhanced tracing with per-tool cost breakdown
+  const perToolLatencies: Record<string, number> = {};
+  for (const tc of result.toolCalls) {
+    perToolLatencies[tc.toolName] = (perToolLatencies[tc.toolName] ?? 0) + (tc.endTime - tc.startTime);
+  }
+
   return {
     traceUrl: result.traceUrl,
     runId: result.runId,
@@ -268,11 +282,16 @@ export function formatTraceMetadata(result: TraceResult): Record<string, unknown
       total: result.costMetrics.totalTokens
     },
     latency: {
-      ms: result.costMetrics.latencyMs
+      ms: result.costMetrics.latencyMs,
+      perTool: perToolLatencies
     },
     cost: {
       usd: result.costMetrics.estimatedCost
     },
-    toolCalls: result.toolCalls.length
+    toolCalls: result.toolCalls.length,
+    toolCallDetails: result.toolCalls.map((tc) => ({
+      name: tc.toolName,
+      durationMs: tc.endTime - tc.startTime
+    }))
   };
 }
