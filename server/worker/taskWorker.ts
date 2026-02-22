@@ -6,7 +6,7 @@
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { Task, TaskErrorType, TaskStatus } from '../types';
-import { getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
+import { enqueueTaskById, getAllTasks, getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
 import { createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
@@ -71,6 +71,29 @@ function hasIncompleteDependencies(task: Task): boolean {
 }
 
 /**
+ * Re-schedule blocked tasks that were waiting on a completed dependency.
+ */
+async function releaseBlockedDependents(completedTaskId: string): Promise<void> {
+  const blockedDependents = getAllTasks().filter((task) => (
+    task.status === 'blocked' && task.dependsOnTaskIds?.includes(completedTaskId)
+  ));
+
+  for (const dependentTask of blockedDependents) {
+    if (hasIncompleteDependencies(dependentTask)) {
+      continue;
+    }
+
+    const pendingTask = updateTaskStatus(dependentTask.id, 'pending');
+    if (!pendingTask) {
+      continue;
+    }
+
+    emitTaskStatus(pendingTask);
+    await enqueueTaskById(pendingTask.id);
+  }
+}
+
+/**
  * Process a task job
  */
 async function processTaskJob(job: Job): Promise<{ result: string }> {
@@ -132,6 +155,7 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
       emitTaskCompleted(completedTask);
       incrementMetric('tasksCompleted');
       await handleTaskCompletion(completedTask);
+      await releaseBlockedDependents(completedTask.id);
 
       if (completedTask.runId && completedTask.conversationId) {
         const summaryMessage = (() => {

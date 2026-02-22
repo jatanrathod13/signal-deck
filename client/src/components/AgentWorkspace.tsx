@@ -57,6 +57,7 @@ export function AgentWorkspace({ className }: AgentWorkspaceProps) {
   const setConversations = useConversationStore((state) => state.setConversations);
   const setMessages = useConversationStore((state) => state.setMessages);
   const setRunEvents = useConversationStore((state) => state.setRunEvents);
+  const appendRunEvent = useConversationStore((state) => state.appendRunEvent);
   const getConversationMessages = useConversationStore((state) => state.getConversationMessages);
   const getConversationEvents = useConversationStore((state) => state.getConversationEvents);
 
@@ -87,9 +88,14 @@ export function AgentWorkspace({ className }: AgentWorkspaceProps) {
 
   useEffect(() => {
     if (activeConversationId && conversationEvents && conversationEvents.length > 0) {
-      setRunEvents(activeConversationId, conversationEvents);
+      if (!eventCursor) {
+        setRunEvents(activeConversationId, conversationEvents);
+        return;
+      }
+
+      conversationEvents.forEach((event) => appendRunEvent(event));
     }
-  }, [activeConversationId, conversationEvents, setRunEvents]);
+  }, [activeConversationId, conversationEvents, eventCursor, setRunEvents, appendRunEvent]);
 
   const messages = getConversationMessages(activeConversationId);
   const events = getConversationEvents(activeConversationId);
