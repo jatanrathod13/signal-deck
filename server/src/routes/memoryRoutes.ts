@@ -46,10 +46,16 @@ router.post('/', async (req: Request<{}, {}, SetMemoryBody>, res: Response) => {
 router.get('/', async (_req: Request, res: Response) => {
   try {
     const keys = await listKeys();
+    const entries = await Promise.all(
+      keys.map(async (key) => ({
+        key,
+        value: await getValue(key)
+      }))
+    );
 
     return res.status(200).json({
       success: true,
-      data: keys
+      data: entries
     });
   } catch (error) {
     return res.status(500).json({

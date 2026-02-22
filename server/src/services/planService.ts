@@ -7,6 +7,7 @@ import { Plan, PlanStatus, PlanStep, PlanStepStatus } from '../../types';
 import { redis } from '../../config/redis';
 import { incrementMetric } from './metricsService';
 import { emitPlanCreated, emitPlanStepStatus, emitPlanUpdated } from './socketService';
+import { appendRunEvent } from './conversationService';
 
 const PLAN_KEY_PREFIX = 'plan:';
 const PLAN_INDEX_KEY = 'plans:index';
@@ -139,6 +140,26 @@ export async function createPlan(input: {
   emitPlanUpdated(plan.id, plan.status);
   await savePlan(plan);
 
+  const conversationId = typeof input.metadata?.conversationId === 'string'
+    ? input.metadata.conversationId
+    : undefined;
+  const runId = typeof input.metadata?.runId === 'string'
+    ? input.metadata.runId
+    : undefined;
+
+  if (conversationId && runId) {
+    appendRunEvent({
+      runId,
+      conversationId,
+      type: 'plan.created',
+      payload: {
+        planId: plan.id,
+        objective: plan.objective,
+        totalSteps: plan.steps.length
+      }
+    });
+  }
+
   return plan;
 }
 
@@ -193,6 +214,26 @@ export async function updateStepStatus(
   }
 
   emitPlanUpdated(plan.id, plan.status);
+
+  const conversationId = typeof plan.metadata?.conversationId === 'string'
+    ? plan.metadata.conversationId
+    : undefined;
+  const runId = typeof plan.metadata?.runId === 'string'
+    ? plan.metadata.runId
+    : undefined;
+
+  if (conversationId && runId) {
+    appendRunEvent({
+      runId,
+      conversationId,
+      type: 'plan.step.status',
+      payload: {
+        planId,
+        stepId,
+        status
+      }
+    });
+  }
 
   plan.updatedAt = new Date();
   await savePlan(plan);

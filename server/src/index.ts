@@ -12,10 +12,15 @@ import taskRoutes from './routes/taskRoutes';
 import memoryRoutes from './routes/memoryRoutes';
 import planRoutes from './routes/planRoutes';
 import metricsRoutes from './routes/metricsRoutes';
+import conversationRoutes from './routes/conversationRoutes';
+import runRoutes from './routes/runRoutes';
+import toolRoutes from './routes/toolRoutes';
+import systemRoutes from './routes/systemRoutes';
 import { initializeSocket } from './services/socketService';
 import { initializeAgentPersistence } from './services/agentService';
 import { bootstrapTaskStore } from './services/taskQueueService';
 import { initializePlans } from './services/planService';
+import { initializeConversationStore } from './services/conversationService';
 import { startWorker, stopWorker } from '../worker/taskWorker';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -46,6 +51,18 @@ app.use('/api/plans', planRoutes);
 
 // Metrics routes
 app.use('/api/metrics', metricsRoutes);
+
+// Conversation routes
+app.use('/api/conversations', conversationRoutes);
+
+// Run routes
+app.use('/api/runs', runRoutes);
+
+// Tool routes
+app.use('/api/tools', toolRoutes);
+
+// System routes
+app.use('/api/system', systemRoutes);
 
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -96,6 +113,7 @@ export async function createServer(): Promise<http.Server> {
   await initializeAgentPersistence();
   await bootstrapTaskStore();
   await initializePlans();
+  await initializeConversationStore();
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {

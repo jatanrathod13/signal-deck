@@ -26,6 +26,21 @@ export type TaskStatus = 'pending' | 'blocked' | 'processing' | 'completed' | 'f
 export type TaskErrorType = 'tool_error' | 'model_error' | 'timeout' | 'validation_error' | 'unknown_error';
 export type PlanStatus = 'draft' | 'active' | 'completed' | 'failed' | 'cancelled';
 export type PlanStepStatus = 'pending' | 'blocked' | 'running' | 'completed' | 'failed' | 'skipped';
+export type ConversationStatus = 'active' | 'archived';
+export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type RunEventType =
+  | 'run.started'
+  | 'run.completed'
+  | 'run.failed'
+  | 'task.status'
+  | 'message.delta'
+  | 'message.created'
+  | 'tool.call'
+  | 'tool.result'
+  | 'tool.error'
+  | 'plan.created'
+  | 'plan.step.status';
 
 // Agent interface
 export interface Agent {
@@ -56,9 +71,52 @@ export interface Task {
   idempotencyKey?: string;
   retryCount?: number;
   metadata?: Record<string, unknown>;
+  conversationId?: string;
+  runId?: string;
   result?: unknown;
   error?: string;
   errorType?: TaskErrorType;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  status: ConversationStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  lastRunId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  role: MessageRole;
+  content: string;
+  createdAt: Date;
+  runId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface Run {
+  id: string;
+  conversationId: string;
+  rootTaskId?: string;
+  status: RunStatus;
+  startedAt: Date;
+  endedAt?: Date;
+  summary?: string;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RunEvent {
+  id: string;
+  runId: string;
+  conversationId: string;
+  type: RunEventType;
+  payload: Record<string, unknown>;
+  timestamp: Date;
 }
 
 export interface PlanStep {
@@ -126,6 +184,8 @@ export interface TaskStatusEvent {
   agentId?: string;
   planId?: string;
   stepId?: string;
+  runId?: string;
+  conversationId?: string;
   timestamp: Date;
 }
 
@@ -150,6 +210,14 @@ export interface SocketEvents {
   'plan-created': { planId: string; timestamp: Date };
   'plan-updated': { planId: string; status: PlanStatus; timestamp: Date };
   'plan-step-status': { planId: string; stepId: string; status: PlanStepStatus; timestamp: Date };
+  'run-event': {
+    id: string;
+    runId: string;
+    conversationId: string;
+    type: RunEventType;
+    payload: Record<string, unknown>;
+    timestamp: Date;
+  };
   'error': ErrorEvent;
 
   // Client -> Server events
