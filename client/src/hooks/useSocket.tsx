@@ -150,12 +150,15 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
       if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.started') {
         const status: RunEventType = event.type;
+        const existingRun = useConversationStore.getState().runs[event.runId];
+        const eventTimestamp = new Date(event.timestamp);
+        const isStartedEvent = status === 'run.started';
         upsertRun({
           id: event.runId,
           conversationId: event.conversationId,
           status: status === 'run.completed' ? 'completed' : (status === 'run.failed' ? 'failed' : 'running'),
-          startedAt: new Date(event.timestamp),
-          endedAt: status === 'run.started' ? undefined : new Date(event.timestamp)
+          startedAt: existingRun?.startedAt ?? eventTimestamp,
+          endedAt: isStartedEvent ? undefined : eventTimestamp
         });
       }
     });

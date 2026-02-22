@@ -259,6 +259,32 @@ export function getTask(taskId: string): Task | undefined {
 }
 
 /**
+ * Re-enqueue an existing task by ID.
+ * Useful for re-scheduling blocked tasks whose dependencies are now satisfied.
+ */
+export async function enqueueTaskById(taskId: string): Promise<boolean> {
+  const task = taskStore.get(taskId);
+  if (!task) {
+    return false;
+  }
+
+  await getTaskQueue().add(
+    task.type,
+    {
+      taskId: task.id,
+      agentId: task.agentId,
+      data: task.data
+    },
+    {
+      priority: task.priority,
+      jobId: task.id
+    }
+  );
+
+  return true;
+}
+
+/**
  * Cancel a task by ID
  */
 export function cancelTask(taskId: string): boolean {
