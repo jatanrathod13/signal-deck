@@ -4,7 +4,7 @@
  */
 
 import { Server } from 'socket.io';
-import { Agent, Task } from '../../types';
+import { Agent, PlanStatus, PlanStepStatus, Task } from '../../types';
 
 // Try to import io from server entry, but handle case where it's not initialized
 let io: Server | null = null;
@@ -57,6 +57,8 @@ export function emitTaskStatus(task: Task): void {
     taskId: task.id,
     status: task.status,
     agentId: task.agentId,
+    planId: task.planId,
+    stepId: task.stepId,
     timestamp: new Date()
   });
 }
@@ -91,6 +93,51 @@ export function emitError(error: string): void {
   io.emit('error', {
     code: 'SERVER_ERROR',
     message: error,
+    timestamp: new Date()
+  });
+}
+
+/**
+ * Emit plan created event.
+ */
+export function emitPlanCreated(planId: string): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('plan-created', {
+    planId,
+    timestamp: new Date()
+  });
+}
+
+/**
+ * Emit plan status update.
+ */
+export function emitPlanUpdated(planId: string, status: PlanStatus): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('plan-updated', {
+    planId,
+    status,
+    timestamp: new Date()
+  });
+}
+
+/**
+ * Emit plan step status update.
+ */
+export function emitPlanStepStatus(planId: string, stepId: string, status: PlanStepStatus): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('plan-step-status', {
+    planId,
+    stepId,
+    status,
     timestamp: new Date()
   });
 }

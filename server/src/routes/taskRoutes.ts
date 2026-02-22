@@ -1,33 +1,55 @@
 /**
  * Task REST Routes
- * Express router for task queue management endpoints
+ * Express router for task queue and orchestration task endpoints.
  */
 
 import { Router, Request, Response } from 'express';
-import { submitTask, getTask, cancelTask, retryTask, getAllTasks } from '../services/taskQueueService';
+import {
+  submitTask,
+  getTask,
+  cancelTask,
+  retryTask,
+  getAllTasks,
+  getChildTasks,
+  getTasksByPlan
+} from '../services/taskQueueService';
 import { Task, TaskStatus } from '../../types';
 
 const router = Router();
 
-// Request body interface for creating a task
 interface CreateTaskBody {
   agentId: string;
   type: string;
   data?: Record<string, unknown>;
   priority?: number;
+  idempotencyKey?: string;
+  parentTaskId?: string;
+  planId?: string;
+  stepId?: string;
+  dependsOnTaskIds?: string[];
+  metadata?: Record<string, unknown>;
 }
 
-// Query interface for filtering tasks
 interface TaskQuery {
   status?: TaskStatus;
+  planId?: string;
 }
 
-// POST /api/tasks - Submit new task
 router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => {
   try {
-    const { agentId, type, data = {}, priority = 1 } = req.body;
+    const {
+      agentId,
+      type,
+      data = {},
+      priority = 1,
+      idempotencyKey,
+      parentTaskId,
+      planId,
+      stepId,
+      dependsOnTaskIds,
+      metadata
+    } = req.body;
 
-    // Validate required fields
     if (!agentId || !type) {
       return res.status(400).json({
         success: false,
@@ -35,7 +57,7 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
       });
     }
 
-    // Create task object
+    const now = new Date();
     const task: Task = {
       id: '',
       agentId,
@@ -43,8 +65,16 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
       data,
       status: 'pending',
       priority,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: now,
+      updatedAt: now,
+      idempotencyKey,
+      parentTaskId,
+      planId,
+      stepId,
+      dependsOnTaskIds,
+      metadata,
+      childTaskIds: [],
+      retryCount: 0
     };
 
     const taskId = await submitTask(task);
@@ -62,15 +92,17 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
   }
 });
 
-// GET /api/tasks - List all tasks (supports ?status=pending)
 router.get('/', (req: Request<{}, {}, {}, TaskQuery>, res: Response) => {
   try {
-    const { status } = req.query;
+    const { status, planId } = req.query;
     let tasks = getAllTasks();
 
-    // Filter by status if provided
     if (status) {
-      tasks = tasks.filter(task => task.status === status);
+      tasks = tasks.filter((task) => task.status === status);
+    }
+
+    if (planId) {
+      tasks = getTasksByPlan(planId).filter((task) => !status || task.status === status);
     }
 
     return res.status(200).json({
@@ -85,7 +117,6 @@ router.get('/', (req: Request<{}, {}, {}, TaskQuery>, res: Response) => {
   }
 });
 
-// GET /api/tasks/:id - Get task by ID
 router.get('/:id', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
@@ -110,7 +141,13 @@ router.get('/:id', (req: Request<{ id: string }>, res: Response) => {
   }
 });
 
-// DELETE /api/tasks/:id - Cancel task
+router.get('/:id/children', (req: Request<{ id: string }>, res: Response) => {
+  return res.status(200).json({
+    success: true,
+    data: getChildTasks(req.params.id)
+  });
+});
+
 router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
@@ -123,11 +160,10 @@ router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
       });
     }
 
-    // Check if task can be cancelled
-    if (task.status !== 'pending' && task.status !== 'processing') {
+    if (task.status !== 'pending' && task.status !== 'processing' && task.status !== 'blocked') {
       return res.status(400).json({
         success: false,
-        error: 'Task already processing'
+        error: 'Task cannot be cancelled in current status'
       });
     }
 
@@ -140,11 +176,9 @@ router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
       });
     }
 
-    const updatedTask = getTask(id);
-
     return res.status(200).json({
       success: true,
-      data: updatedTask
+      data: getTask(id)
     });
   } catch (error) {
     return res.status(500).json({
@@ -154,7 +188,6 @@ router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
   }
 });
 
-// POST /api/tasks/:id/retry - Retry failed task
 router.post('/:id/retry', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
@@ -167,7 +200,6 @@ router.post('/:id/retry', async (req: Request<{ id: string }>, res: Response) =>
       });
     }
 
-    // Can only retry failed or cancelled tasks
     if (task.status !== 'failed' && task.status !== 'cancelled') {
       return res.status(400).json({
         success: false,
@@ -176,26 +208,20 @@ router.post('/:id/retry', async (req: Request<{ id: string }>, res: Response) =>
     }
 
     const newTaskId = await retryTask(id);
-    const newTask = getTask(newTaskId);
 
     return res.status(200).json({
       success: true,
-      data: newTask
+      data: getTask(newTaskId)
     });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'Task not found') {
-        return res.status(404).json({
-          success: false,
-          error: 'Task not found'
-        });
-      }
-      return res.status(400).json({
+    if (error instanceof Error && error.message === 'Task not found') {
+      return res.status(404).json({
         success: false,
-        error: error.message
+        error: 'Task not found'
       });
     }
-    return res.status(500).json({
+
+    return res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to retry task'
     });
