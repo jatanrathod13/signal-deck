@@ -321,6 +321,11 @@ export function getRun(runId: string): Run | undefined {
   return runs.get(runId);
 }
 
+export function listRuns(): Run[] {
+  return Array.from(runs.values())
+    .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+}
+
 export function updateRun(
   runId: string,
   status: RunStatus,

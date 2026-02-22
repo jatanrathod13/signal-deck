@@ -177,7 +177,10 @@ function maybeDecodeTokenPayload(token: string): JwtPayload | null {
 }
 
 function shouldSkipAuth(path: string): boolean {
-  return path.startsWith('/metrics') || path.startsWith('/system/healthz') || path.startsWith('/system/ready');
+  return path.startsWith('/metrics')
+    || path.startsWith('/system/healthz')
+    || path.startsWith('/system/ready')
+    || path.startsWith('/webhooks/inbound/');
 }
 
 export async function supabaseAuthMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {

@@ -4,7 +4,7 @@
 Create an implementation-ready plan for `ROADMAP.md` that is grounded in the current codebase and verified with current Supabase and Vercel AI SDK guidance.
 
 ## Current Phase
-Phase 4
+Phase 5
 
 ## Phases
 
@@ -32,11 +32,11 @@ Phase 4
 - **Status:** complete
 
 ### Phase 4: Priority 2 (Month 2) Build Plan
-- [ ] Expand dashboard for CRUD + real-time run/task observability
-- [ ] Add scheduling subsystem (pg_cron + fallback worker scheduler)
-- [ ] Add webhooks (inbound triggers + outbound notifications + retries)
-- [ ] Ship operational documentation and SLO baselines
-- **Status:** pending
+- [x] Expand dashboard for CRUD + real-time run/task observability
+- [x] Add scheduling subsystem (pg_cron + fallback worker scheduler)
+- [x] Add webhooks (inbound triggers + outbound notifications + retries)
+- [x] Ship operational documentation and SLO baselines
+- **Status:** complete
 
 ### Phase 5: Priority 3 (Month 3) Build Plan
 - [ ] Implement app-level multi-tenancy (workspaces/tenants in DB, not Supabase orgs)
@@ -78,7 +78,8 @@ Phase 4
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| None | 1 | N/A |
+| `client` build type mismatch in schedule payload typing | 1 | Updated client API payload contract to allow partial payload and keep server-side validation authoritative |
+| Webhook retry test timing race with fake timers | 1 | Reworked test timing to use async timer advancement and final-state assertions |
 
 ## Notes
 - Current repo already has strong run intelligence/evaluator/governance scaffolding in `server/src/services`.
@@ -92,3 +93,9 @@ Phase 4
   - Structured request logging + correlation IDs + Prometheus request metrics.
   - `/ready` and `/api/system/ready` dependency checks (Redis + Supabase + queue).
   - Smoke/integration coverage for auth and readiness plus rollback/env docs.
+- Phase 4 completion artifacts now include:
+  - Schedule subsystem with fallback loop, pg_cron registration attempts, and CRUD/trigger APIs (`/api/schedules`).
+  - Webhook subsystem with inbound triggers, outbound notifications, retry loop, and CRUD/test APIs (`/api/webhooks`).
+  - Real-time socket events for scheduler and webhook delivery observability (`schedule-triggered`, `webhook-delivery`).
+  - Dashboard expansion with dedicated Observability, Schedules, and Webhooks tabs plus agent edit support.
+  - Operational documentation and SLO baseline at `server/docs/PHASE4_OPERATIONS_SLO_BASELINES.md`.

@@ -15,13 +15,17 @@ import metricsRoutes from './routes/metricsRoutes';
 import conversationRoutes from './routes/conversationRoutes';
 import runRoutes from './routes/runRoutes';
 import toolRoutes from './routes/toolRoutes';
+import scheduleRoutes from './routes/scheduleRoutes';
 import systemRoutes from './routes/systemRoutes';
+import webhookRoutes from './routes/webhookRoutes';
 import { initializeSocket } from './services/socketService';
 import { initializeAgentPersistence } from './services/agentService';
 import { bootstrapTaskStore } from './services/taskQueueService';
 import { initializePlans } from './services/planService';
 import { initializeConversationStore } from './services/conversationService';
 import { initializeApprovalStore } from './services/governanceService';
+import { initializeScheduleService, stopScheduleService } from './services/scheduleService';
+import { initializeWebhookService, stopWebhookService } from './services/webhookService';
 import { startWorker, stopWorker } from '../worker/taskWorker';
 import { requestContextMiddleware } from './middleware/requestContextMiddleware';
 import { supabaseAuthMiddleware } from './middleware/authMiddleware';
@@ -74,6 +78,12 @@ app.use('/api/conversations', conversationRoutes);
 
 // Run routes
 app.use('/api/runs', runRoutes);
+
+// Schedule routes
+app.use('/api/schedules', scheduleRoutes);
+
+// Webhook routes
+app.use('/api/webhooks', webhookRoutes);
 
 // Tool routes
 app.use('/api/tools', toolRoutes);
@@ -136,6 +146,8 @@ export async function createServer(): Promise<http.Server> {
   await initializePlans();
   await initializeConversationStore();
   await initializeApprovalStore();
+  await initializeScheduleService();
+  await initializeWebhookService();
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {
@@ -149,6 +161,8 @@ export async function createServer(): Promise<http.Server> {
 // Graceful shutdown handlers
 process.on('SIGTERM', async () => {
   logger.info('signal.sigterm_received');
+  await stopScheduleService();
+  await stopWebhookService();
   await stopWorker();
   server.close(() => {
     logger.info('server.closed');
@@ -158,6 +172,8 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   logger.info('signal.sigint_received');
+  await stopScheduleService();
+  await stopWebhookService();
   await stopWorker();
   server.close(() => {
     logger.info('server.closed');

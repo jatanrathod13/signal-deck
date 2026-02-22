@@ -3,15 +3,18 @@
  * Main application shell with tabbed panels
  */
 import { useEffect, useState } from 'react';
-import { Activity, Bot, Database, ListChecks, Users } from 'lucide-react';
+import { Activity, BellRing, Bot, CalendarClock, Database, Eye, ListChecks, Users } from 'lucide-react';
 import { AgentWorkspace } from './AgentWorkspace';
 import { AgentDeploy } from './AgentDeploy';
 import { AgentList } from './AgentList';
 import { MemoryPanel } from './MemoryPanel';
+import { ObservabilityPanel } from './ObservabilityPanel';
+import { ScheduleManager } from './ScheduleManager';
 import { TaskQueue } from './TaskQueue';
+import { WebhookManager } from './WebhookManager';
 import { cn } from '../lib/utils';
 
-type TabType = 'workspace' | 'agents' | 'tasks' | 'memory';
+type TabType = 'workspace' | 'agents' | 'tasks' | 'observability' | 'schedules' | 'webhooks' | 'memory';
 
 interface TabConfig {
   id: TabType;
@@ -23,6 +26,9 @@ const tabs: TabConfig[] = [
   { id: 'workspace', label: 'Workspace', icon: Bot },
   { id: 'agents', label: 'Agents', icon: Users },
   { id: 'tasks', label: 'Tasks', icon: ListChecks },
+  { id: 'observability', label: 'Observability', icon: Eye },
+  { id: 'schedules', label: 'Schedules', icon: CalendarClock },
+  { id: 'webhooks', label: 'Webhooks', icon: BellRing },
   { id: 'memory', label: 'Memory', icon: Database },
 ];
 
@@ -62,6 +68,12 @@ export function Dashboard({ className }: DashboardProps) {
         );
       case 'tasks':
         return <TaskQueue className="tab-in" />;
+      case 'observability':
+        return <ObservabilityPanel className="tab-in" />;
+      case 'schedules':
+        return <ScheduleManager className="tab-in" />;
+      case 'webhooks':
+        return <WebhookManager className="tab-in" />;
       case 'memory':
         return <MemoryPanel className="tab-in" />;
       default:
@@ -124,7 +136,7 @@ export function Dashboard({ className }: DashboardProps) {
         <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">{renderContent()}</main>
 
         <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0b1020]/85 px-3 py-2 backdrop-blur-xl sm:hidden">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -132,10 +144,7 @@ export function Dashboard({ className }: DashboardProps) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'surface-lift inline-flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium',
-                    isActive ? 'btn-primary' : 'btn-ghost'
-                  )}
+                  className={cn('surface-lift inline-flex min-w-[92px] flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium', isActive ? 'btn-primary' : 'btn-ghost')}
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}

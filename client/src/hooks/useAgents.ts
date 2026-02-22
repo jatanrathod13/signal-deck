@@ -12,8 +12,10 @@ import {
   deployAgent,
   startAgent,
   stopAgent,
+  updateAgent,
   deleteAgent,
   DeployAgentData,
+  UpdateAgentData,
 } from '../lib/api';
 
 // Query keys for cache management
@@ -119,6 +121,21 @@ export function useDeleteAgent(): UseMutationResult<boolean, Error, string> {
   });
 }
 
+/**
+ * Update agent mutation
+ */
+export function useUpdateAgent(): UseMutationResult<Agent, Error, { id: string; data: UpdateAgentData }> {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }) => updateAgent(id, data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(data.id) });
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() });
+    },
+  });
+}
+
 // ============================================
 // Type Exports
 // ============================================
@@ -133,3 +150,5 @@ export type UseStopAgentVariables = string;
 export type UseStopAgentResult = UseMutationResult<Agent, Error, string>;
 export type UseDeleteAgentVariables = string;
 export type UseDeleteAgentResult = UseMutationResult<boolean, Error, string>;
+export type UseUpdateAgentVariables = { id: string; data: UpdateAgentData };
+export type UseUpdateAgentResult = UseMutationResult<Agent, Error, UseUpdateAgentVariables>;

@@ -307,6 +307,44 @@ class AgentService extends EventEmitter {
   }
 
   /**
+   * Update mutable agent properties.
+   */
+  updateAgent(
+    id: string,
+    updates: {
+      name?: string;
+      type?: string;
+      config?: Record<string, unknown>;
+    }
+  ): Agent {
+    const agent = agents.get(id);
+    if (!agent) {
+      throw new Error('Agent not found');
+    }
+
+    if (updates.name !== undefined) {
+      agent.name = updates.name;
+    }
+    if (updates.type !== undefined) {
+      agent.type = updates.type;
+    }
+    if (updates.config !== undefined) {
+      agent.config = updates.config;
+    }
+
+    agent.updatedAt = new Date();
+
+    persistAgent(agent).catch((err) => {
+      console.error('Failed to update agent persistence:', err);
+    });
+
+    this.emit('agent:updated', { agentId: id, agent });
+    emitAgentStatus(agent);
+
+    return agent;
+  }
+
+  /**
    * Generate a unique ID for agents
    */
   private generateId(): string {
@@ -338,6 +376,15 @@ export const listAgents = (): Agent[] =>
 
 export const deleteAgent = (id: string): boolean =>
   agentService.deleteAgent(id);
+
+export const updateAgent = (
+  id: string,
+  updates: {
+    name?: string;
+    type?: string;
+    config?: Record<string, unknown>;
+  }
+): Agent => agentService.updateAgent(id, updates);
 
 // Export initialization function for startup loading
 export const initializeAgentPersistence = initializeRedis;

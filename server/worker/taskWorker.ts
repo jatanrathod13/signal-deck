@@ -12,6 +12,7 @@ import { executeAgentTask } from '../src/services/executionService';
 import { createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
 import { incrementMetric } from '../src/services/metricsService';
 import { addConversationMessage, appendRunEvent, getRun, updateRun } from '../src/services/conversationService';
+import { enqueueWebhookNotification } from '../src/services/webhookService';
 
 // Redis connection for BullMQ worker
 let redisConnection: Redis | null = null;
@@ -188,6 +189,18 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
     if (completedTask) {
       emitTaskCompleted(completedTask);
       incrementMetric('tasksCompleted');
+      enqueueWebhookNotification('task.completed', {
+        taskId: completedTask.id,
+        agentId: completedTask.agentId,
+        type: completedTask.type,
+        status: completedTask.status,
+        runId: completedTask.runId,
+        conversationId: completedTask.conversationId,
+        result: completedTask.result,
+        timestamp: new Date().toISOString()
+      }).catch((webhookError) => {
+        console.warn('[TaskWorker] Failed to enqueue task.completed webhook:', webhookError);
+      });
       await handleTaskCompletion(completedTask);
       await releaseBlockedDependents(completedTask.id);
 
@@ -294,6 +307,19 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
     if (failedTask) {
       emitTaskStatus(failedTask);
       incrementMetric('tasksFailed');
+      enqueueWebhookNotification('task.failed', {
+        taskId: failedTask.id,
+        agentId: failedTask.agentId,
+        type: failedTask.type,
+        status: failedTask.status,
+        runId: failedTask.runId,
+        conversationId: failedTask.conversationId,
+        error: failedTask.error,
+        errorType: failedTask.errorType,
+        timestamp: new Date().toISOString()
+      }).catch((webhookError) => {
+        console.warn('[TaskWorker] Failed to enqueue task.failed webhook:', webhookError);
+      });
       await handleTaskFailure(failedTask);
 
       if (failedTask.runId && failedTask.conversationId) {

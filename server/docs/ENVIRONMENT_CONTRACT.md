@@ -1,4 +1,4 @@
-# Environment Variable Contract (Phase 3)
+# Environment Variable Contract (Phase 4)
 
 ## Core Runtime
 - `PORT`: HTTP server port (default `3001`)
@@ -28,3 +28,15 @@
 ## Queue Settings
 - `TASK_JOB_ATTEMPTS`: BullMQ retries per job (default `1`)
 - `TASK_JOB_BACKOFF_DELAY_MS`: Exponential backoff seed delay (default `1000`)
+
+## Scheduler
+- `SCHEDULER_TICK_MS`: Fallback scheduler polling interval in milliseconds (default `10000`)
+- `FEATURE_SCHEDULE_PG_CRON`: Enables best-effort `pg_cron` job registration (`true|false`, default `true`)
+- `SUPABASE_DEFAULT_USER_ID`: Optional user id stamped on schedule records created by server-side automation
+
+## Webhooks
+- `WEBHOOK_RETRY_TICK_MS`: Retry loop polling interval in milliseconds (default `5000`)
+- `WEBHOOK_RETRY_BASE_SECONDS`: Exponential retry base delay in seconds (default `30`)
+- `WEBHOOK_REQUEST_TIMEOUT_MS`: Outbound webhook HTTP timeout in milliseconds (default `10000`)
+- `WEBHOOK_SIGNING_SECRET`: Global HMAC secret used for webhook signing/verification when per-webhook secret is not set
+- `ALLOW_UNREGISTERED_INBOUND_WEBHOOKS`: Allows inbound triggers even without registered inbound webhook definitions (`true|false`, default `false`)

@@ -4,7 +4,15 @@
  */
 
 import { Server } from 'socket.io';
-import { Agent, PlanStatus, PlanStepStatus, RunEvent, Task } from '../../types';
+import {
+  Agent,
+  PlanStatus,
+  PlanStepStatus,
+  RunEvent,
+  ScheduleTriggeredEvent,
+  Task,
+  WebhookDeliveryEvent
+} from '../../types';
 
 // Try to import io from server entry, but handle case where it's not initialized
 let io: Server | null = null;
@@ -188,6 +196,28 @@ export function emitRunEvent(event: RunEvent): void {
     payload: event.payload,
     timestamp: event.timestamp
   });
+}
+
+/**
+ * Emit schedule trigger execution updates.
+ */
+export function emitScheduleTriggered(event: ScheduleTriggeredEvent): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('schedule-triggered', event);
+}
+
+/**
+ * Emit webhook delivery status updates.
+ */
+export function emitWebhookDelivery(event: WebhookDeliveryEvent): void {
+  if (!io) {
+    return;
+  }
+
+  io.emit('webhook-delivery', event);
 }
 
 // Re-export io for external access if needed

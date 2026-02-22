@@ -19,8 +19,10 @@ import type {
   RunIntelligence,
   ApprovalRequest,
   SharedMemoryValue,
+  ScheduleDefinition,
   Task,
-  TaskExecutionMode
+  TaskExecutionMode,
+  WebhookDefinition
 } from '../types';
 
 // Base URL from environment or fallback to localhost
@@ -97,6 +99,12 @@ export interface DeployAgentData {
   config?: Record<string, unknown>;
 }
 
+export interface UpdateAgentData {
+  name?: string;
+  type?: string;
+  config?: Record<string, unknown>;
+}
+
 export async function deployAgent(data: DeployAgentData): Promise<Agent> {
   return fetchApi<Agent>('/api/agents', {
     method: 'POST',
@@ -111,6 +119,17 @@ export async function deployAgent(data: DeployAgentData): Promise<Agent> {
 export async function startAgent(id: string): Promise<Agent> {
   return fetchApi<Agent>(`/api/agents/${encodeURIComponent(id)}/start`, {
     method: 'POST',
+  });
+}
+
+/**
+ * Update agent metadata/config
+ * PATCH /api/agents/:id
+ */
+export async function updateAgent(id: string, data: UpdateAgentData): Promise<Agent> {
+  return fetchApi<Agent>(`/api/agents/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
   });
 }
 
@@ -223,6 +242,135 @@ export async function retryTask(id: string): Promise<Task> {
 }
 
 // ============================================
+// Schedule API Functions
+// ============================================
+
+export interface ScheduleTaskPayload {
+  agentId?: string;
+  type?: string;
+  data?: Record<string, unknown>;
+  executionMode?: TaskExecutionMode;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateScheduleData {
+  name: string;
+  cronExpression: string;
+  timezone?: string;
+  payload?: ScheduleTaskPayload;
+  enabled?: boolean;
+  retryLimit?: number;
+  retryBackoffSeconds?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateScheduleData {
+  name?: string;
+  cronExpression?: string;
+  timezone?: string;
+  payload?: ScheduleTaskPayload;
+  enabled?: boolean;
+  retryLimit?: number;
+  retryBackoffSeconds?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export async function getSchedules(): Promise<ScheduleDefinition[]> {
+  return fetchApi<ScheduleDefinition[]>('/api/schedules');
+}
+
+export async function getSchedule(id: string): Promise<ScheduleDefinition> {
+  return fetchApi<ScheduleDefinition>(`/api/schedules/${encodeURIComponent(id)}`);
+}
+
+export async function createSchedule(data: CreateScheduleData): Promise<ScheduleDefinition> {
+  return fetchApi<ScheduleDefinition>('/api/schedules', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateSchedule(id: string, data: UpdateScheduleData): Promise<ScheduleDefinition> {
+  return fetchApi<ScheduleDefinition>(`/api/schedules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function triggerSchedule(id: string): Promise<{ taskQueued: boolean }> {
+  return fetchApi<{ taskQueued: boolean }>(`/api/schedules/${encodeURIComponent(id)}/trigger`, {
+    method: 'POST'
+  });
+}
+
+export async function deleteSchedule(id: string): Promise<boolean> {
+  const result = await fetchApi<{ deleted?: boolean }>(`/api/schedules/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+  return result?.deleted ?? true;
+}
+
+// ============================================
+// Webhook API Functions
+// ============================================
+
+export interface CreateWebhookData {
+  direction: 'inbound' | 'outbound';
+  eventName: string;
+  targetUrl?: string;
+  headers?: Record<string, string>;
+  maxAttempts?: number;
+  status?: 'pending' | 'delivered' | 'failed' | 'disabled';
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateWebhookData {
+  eventName?: string;
+  targetUrl?: string;
+  headers?: Record<string, string>;
+  maxAttempts?: number;
+  status?: 'pending' | 'delivered' | 'failed' | 'disabled';
+  metadata?: Record<string, unknown>;
+}
+
+export async function getWebhooks(): Promise<WebhookDefinition[]> {
+  return fetchApi<WebhookDefinition[]>('/api/webhooks');
+}
+
+export async function getWebhook(id: string): Promise<WebhookDefinition> {
+  return fetchApi<WebhookDefinition>(`/api/webhooks/${encodeURIComponent(id)}`);
+}
+
+export async function createWebhook(data: CreateWebhookData): Promise<WebhookDefinition> {
+  return fetchApi<WebhookDefinition>('/api/webhooks', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateWebhook(id: string, data: UpdateWebhookData): Promise<WebhookDefinition> {
+  return fetchApi<WebhookDefinition>(`/api/webhooks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function testWebhook(id: string, payload?: Record<string, unknown>): Promise<{ queued: boolean }> {
+  return fetchApi<{ queued: boolean }>(`/api/webhooks/${encodeURIComponent(id)}/test`, {
+    method: 'POST',
+    body: JSON.stringify(payload ?? {})
+  });
+}
+
+export async function deleteWebhook(id: string): Promise<boolean> {
+  const result = await fetchApi<{ deleted?: boolean }>(`/api/webhooks/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  });
+  return result?.deleted ?? true;
+}
+
+// ============================================
 // Plan API Functions
 // ============================================
 
@@ -331,6 +479,15 @@ export async function getConversationEvents(conversationId: string, after?: stri
 
 export async function getRun(runId: string): Promise<RunDetail> {
   return fetchApi<RunDetail>(`/api/runs/${encodeURIComponent(runId)}`);
+}
+
+export async function getRuns(status?: string, limit: number = 100): Promise<Run[]> {
+  const params = new URLSearchParams();
+  if (status) {
+    params.set('status', status);
+  }
+  params.set('limit', String(limit));
+  return fetchApi<Run[]>(`/api/runs?${params.toString()}`);
 }
 
 // ============================================

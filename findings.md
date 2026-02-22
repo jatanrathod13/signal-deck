@@ -54,6 +54,8 @@
 | Issue | Resolution |
 |-------|------------|
 | Very large MCP doc payloads from search tool | Switched to targeted topic queries and direct URL checks |
+| Phase 4 client build type mismatch (`ScheduleTaskPayload` strictness) | Updated client API payload typing to accept partial schedule payload while runtime validation remains server-side |
+| Phase 4 webhook retry test race under fake timers | Used async timer advancement (`jest.advanceTimersByTimeAsync`) and asserted final delivery state |
 
 ## Resources
 - Roadmap: `/Users/jatanrathod/Applications/context-engineering-kit-test/ROADMAP.md`
@@ -129,3 +131,47 @@
 - Final verification:
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (17 suites, 115 tests).
+
+## Phase 4 Completion Update (2026-02-22)
+- Scheduling subsystem:
+  - Added scheduler runtime service with fallback execution loop and cron parsing:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/scheduleService.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/lib/cronUtils.ts`
+  - Added schedule CRUD + manual trigger routes:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/routes/scheduleRoutes.ts`
+  - Added Supabase schedule repository:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/repositories/supabase/supabaseScheduleRepository.ts`
+  - Added pg_cron helper migration:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/supabase/migrations/202602230002_phase4_scheduler_helpers.sql`
+- Webhook subsystem:
+  - Added webhook runtime service for inbound triggers, outbound dispatch, and retry loop:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/webhookService.ts`
+  - Added webhook CRUD + test + inbound trigger routes:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/routes/webhookRoutes.ts`
+  - Added Supabase webhook repository:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/repositories/supabase/supabaseWebhookRepository.ts`
+  - Wired outbound webhook notifications to task lifecycle in:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/worker/taskWorker.ts`
+- Dashboard expansion:
+  - Added new operations UI surfaces:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/client/src/components/ObservabilityPanel.tsx`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/client/src/components/ScheduleManager.tsx`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/client/src/components/WebhookManager.tsx`
+  - Extended dashboard tabs and mobile nav in:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/client/src/components/Dashboard.tsx`
+  - Added agent edit support (PATCH API + client editor):
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/routes/agentRoutes.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/agentService.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/client/src/components/AgentCard.tsx`
+- Real-time observability additions:
+  - Added socket events `schedule-triggered` and `webhook-delivery` end-to-end.
+  - Added operations event store:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/client/src/stores/operationsStore.ts`
+- Operational documentation + SLO baseline:
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/PHASE4_OPERATIONS_SLO_BASELINES.md`
+  - Updated env contract:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/ENVIRONMENT_CONTRACT.md`
+- Verification:
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (19 suites, 120 tests).
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` passed.

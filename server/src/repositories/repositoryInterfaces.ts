@@ -166,6 +166,7 @@ export interface WebhookRepository {
     updates: Partial<Omit<WebhookDeliveryRecord, 'id' | 'workspaceId' | 'createdAt' | 'updatedAt'>>,
     ctx?: RepositoryRequestContext
   ): Promise<WebhookDeliveryRecord | null>;
+  deleteWebhookDelivery(id: string, ctx?: RepositoryRequestContext): Promise<boolean>;
 }
 
 export interface ScheduleRepository {
@@ -177,6 +178,7 @@ export interface ScheduleRepository {
     updates: Partial<Omit<ScheduleRecord, 'id' | 'workspaceId' | 'createdAt' | 'updatedAt'>>,
     ctx?: RepositoryRequestContext
   ): Promise<ScheduleRecord | null>;
+  deleteSchedule(id: string, ctx?: RepositoryRequestContext): Promise<boolean>;
 }
 
 export interface AuditEventRepository {

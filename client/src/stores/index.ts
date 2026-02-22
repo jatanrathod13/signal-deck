@@ -4,3 +4,4 @@
 export * from './agentStore';
 export * from './taskStore';
 export * from './conversationStore';
+export * from './operationsStore';
