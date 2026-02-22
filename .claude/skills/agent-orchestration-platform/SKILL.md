@@ -60,12 +60,14 @@ An Agent Orchestration Platform enables deployment, monitoring, and coordination
 | **jsonwebtoken** | JWT handling | Stable | JWT encode/decode |
 | **helmet** | Security headers | Stable | HTTP security headers |
 | **cors** | CORS handling | Stable | Cross-origin resource sharing |
+| **@modelcontextprotocol/sdk** | Tooling Integration | Stable | MCP Protocol client for Agent tool usage |
 
 ### Recommended Stack
 
-- **Backend**: Node.js/Express + Socket.io + BullMQ + Redis
+- **Backend**: Node.js/Express + Socket.io + BullMQ + Redis + MCP SDK
 - **Frontend**: React + TypeScript + Tailwind CSS + shadcn/ui
 - **Database**: Redis (queue + shared memory), optional PostgreSQL (persistence)
+- **Execution Modes**: Native Toolloop (Vercel AI SDK) & Local Claude CLI orchestration
 
 ---
 
