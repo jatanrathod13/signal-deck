@@ -21,6 +21,7 @@ import { initializeAgentPersistence } from './services/agentService';
 import { bootstrapTaskStore } from './services/taskQueueService';
 import { initializePlans } from './services/planService';
 import { initializeConversationStore } from './services/conversationService';
+import { initializeApprovalStore } from './services/governanceService';
 import { startWorker, stopWorker } from '../worker/taskWorker';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -114,6 +115,7 @@ export async function createServer(): Promise<http.Server> {
   await bootstrapTaskStore();
   await initializePlans();
   await initializeConversationStore();
+  await initializeApprovalStore();
 
   return new Promise((resolve) => {
     server.listen(PORT, () => {

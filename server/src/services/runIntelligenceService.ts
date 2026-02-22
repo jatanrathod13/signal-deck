@@ -62,52 +62,67 @@ export function buildRunIntelligence(runId: string): RunIntelligence | undefined
     new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
-  // Group events into phases
-  const phaseMap = new Map<string, {
+  // Group events into contiguous phase segments to avoid collapsing repeated
+  // non-contiguous phases into a single bucket.
+  const phases: RunPhase[] = [];
+  let currentSegment: {
+    name: string;
     events: RunEvent[];
     startedAt: Date;
-    endedAt?: Date;
-  }>();
+    endedAt: Date;
+  } | undefined;
 
   for (const event of sorted) {
     const phaseName = PHASE_MAPPINGS[event.type] || 'Other';
-    const existing = phaseMap.get(phaseName);
     const eventTime = new Date(event.timestamp);
 
-    if (existing) {
-      existing.events.push(event);
-      if (!existing.endedAt || eventTime.getTime() > existing.endedAt.getTime()) {
-        existing.endedAt = eventTime;
+    if (!currentSegment || currentSegment.name !== phaseName) {
+      if (currentSegment) {
+        const hasFailure = currentSegment.events.some((segmentEvent) =>
+          segmentEvent.type === 'tool.error' || segmentEvent.type === 'run.failed'
+        );
+        const startTime = currentSegment.startedAt.getTime();
+        const endTime = currentSegment.endedAt.getTime();
+
+        phases.push({
+          name: currentSegment.name,
+          startedAt: currentSegment.startedAt,
+          endedAt: currentSegment.endedAt,
+          durationMs: endTime - startTime,
+          eventCount: currentSegment.events.length,
+          status: hasFailure ? 'failed' : 'completed'
+        });
       }
-    } else {
-      phaseMap.set(phaseName, {
+
+      currentSegment = {
+        name: phaseName,
         events: [event],
         startedAt: eventTime,
         endedAt: eventTime
-      });
+      };
+    } else {
+      currentSegment.events.push(event);
+      currentSegment.endedAt = eventTime;
     }
   }
 
-  // Convert to RunPhase array
-  const phases: RunPhase[] = Array.from(phaseMap.entries()).map(([name, data]) => {
-    const startTime = data.startedAt.getTime();
-    const endTime = data.endedAt?.getTime() ?? startTime;
-    const hasFailure = data.events.some((e) =>
-      e.type === 'tool.error' || e.type === 'run.failed'
+  if (currentSegment) {
+    const hasFailure = currentSegment.events.some((segmentEvent) =>
+      segmentEvent.type === 'tool.error' || segmentEvent.type === 'run.failed'
     );
+    const isRunningRun = run.status === 'running';
+    const startTime = currentSegment.startedAt.getTime();
+    const endTime = currentSegment.endedAt.getTime();
 
-    return {
-      name,
-      startedAt: data.startedAt,
-      endedAt: data.endedAt,
+    phases.push({
+      name: currentSegment.name,
+      startedAt: currentSegment.startedAt,
+      endedAt: currentSegment.endedAt,
       durationMs: endTime - startTime,
-      eventCount: data.events.length,
-      status: hasFailure ? 'failed' : (data.endedAt ? 'completed' : 'running')
-    };
-  });
-
-  // Sort phases by start time
-  phases.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+      eventCount: currentSegment.events.length,
+      status: hasFailure ? 'failed' : (isRunningRun ? 'running' : 'completed')
+    });
+  }
 
   // Identify bottleneck (longest phase)
   const bottleneckPhase = phases.reduce((max, phase) =>

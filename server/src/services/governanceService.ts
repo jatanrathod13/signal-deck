@@ -8,6 +8,7 @@ import {
   ApprovalStatus,
   GovernancePolicy
 } from '../../types';
+import { redis } from '../../config/redis';
 import { appendRunEvent, getRun } from './conversationService';
 
 // In-memory approval store (keyed by approval ID)
@@ -15,9 +16,79 @@ const approvals = new Map<string, ApprovalRequest>();
 
 // Pending approval callbacks (approval ID -> resolve function)
 const pendingApprovalCallbacks = new Map<string, (approved: boolean) => void>();
+const APPROVAL_KEY_PREFIX = 'approval:';
+const APPROVAL_INDEX_KEY = 'approvals:index';
 
 function generateId(): string {
   return `approval-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function serializeApproval(approval: ApprovalRequest): string {
+  return JSON.stringify(approval);
+}
+
+function deserializeApproval(raw: string): ApprovalRequest {
+  const parsed = JSON.parse(raw) as ApprovalRequest;
+  return {
+    ...parsed,
+    requestedAt: new Date(parsed.requestedAt),
+    resolvedAt: parsed.resolvedAt ? new Date(parsed.resolvedAt) : undefined
+  };
+}
+
+async function persistApproval(approval: ApprovalRequest): Promise<void> {
+  try {
+    const pipeline = redis.pipeline();
+    pipeline.set(`${APPROVAL_KEY_PREFIX}${approval.id}`, serializeApproval(approval));
+    pipeline.sadd(APPROVAL_INDEX_KEY, approval.id);
+    await pipeline.exec();
+  } catch (error) {
+    console.warn('[GovernanceService] Failed to persist approval:', error);
+  }
+}
+
+function persistApprovalAsync(approval: ApprovalRequest): void {
+  persistApproval(approval).catch((error) => {
+    console.warn('[GovernanceService] Async approval persistence failed:', error);
+  });
+}
+
+/**
+ * Initialize approvals from Redis on startup.
+ */
+export async function initializeApprovalStore(): Promise<void> {
+  try {
+    approvals.clear();
+    const ids = await redis.smembers(APPROVAL_INDEX_KEY);
+    if (ids.length === 0) {
+      return;
+    }
+
+    const pipeline = redis.pipeline();
+    for (const id of ids) {
+      pipeline.get(`${APPROVAL_KEY_PREFIX}${id}`);
+    }
+
+    const results = await pipeline.exec();
+    if (!results) {
+      return;
+    }
+
+    for (const [err, raw] of results) {
+      if (err || !raw) {
+        continue;
+      }
+
+      try {
+        const approval = deserializeApproval(raw as string);
+        approvals.set(approval.id, approval);
+      } catch (parseError) {
+        console.warn('[GovernanceService] Failed to parse approval payload:', parseError);
+      }
+    }
+  } catch (error) {
+    console.warn('[GovernanceService] Failed to initialize approvals from Redis:', error);
+  }
 }
 
 /**
@@ -84,6 +155,7 @@ export async function requestApproval(
   };
 
   approvals.set(approvalId, approval);
+  persistApprovalAsync(approval);
 
   // Emit approval request event
   appendRunEvent({
@@ -107,6 +179,7 @@ export async function requestApproval(
         pending.status = 'timed_out';
         pending.resolvedAt = new Date();
         pendingApprovalCallbacks.delete(approvalId);
+        persistApprovalAsync(pending);
 
         appendRunEvent({
           runId: context.runId,
@@ -147,6 +220,7 @@ export function resolveApproval(
   approval.status = decision;
   approval.resolvedAt = new Date();
   approval.resolvedBy = resolvedBy;
+  persistApprovalAsync(approval);
 
   const run = getRun(approval.runId);
   if (run) {
