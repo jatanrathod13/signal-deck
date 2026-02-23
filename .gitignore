@@ -1,3 +1,5 @@
+.specs/
+server/.specs/
 .specs/scratchpad/
 
 # Dependencies
