@@ -16,6 +16,8 @@ import { submitTask } from './taskQueueService';
 import { Task, TaskExecutionMode } from '../../types';
 import { emitWebhookDelivery } from './socketService';
 import { logger } from '../lib/logger';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
+import { appendAuditEvent } from './auditService';
 
 interface InboundTaskPayload {
   agentId?: string;
@@ -52,7 +54,7 @@ let retryLoop: NodeJS.Timeout | null = null;
 let processingRetries = false;
 
 function getWorkspaceId(): string {
-  return process.env.DEFAULT_WORKSPACE_ID ?? '';
+  return getCurrentWorkspaceIdOrDefault() ?? '';
 }
 
 function getRetryTickMs(): number {
@@ -487,20 +489,41 @@ export async function createWebhook(input: CreateWebhookInput): Promise<WebhookD
     });
   }
 
+  appendAuditEvent({
+    workspaceId,
+    action: 'webhook.created',
+    resourceType: 'webhook',
+    resourceId: created.id,
+    metadata: {
+      direction: created.direction,
+      eventName: created.eventName
+    }
+  }).catch(() => undefined);
+
   return webhooks.get(created.id) ?? created;
 }
 
 export function listWebhooks(): WebhookDeliveryRecord[] {
   return Array.from(webhooks.values())
+    .filter((webhook) => isWorkspaceMatch(webhook.workspaceId, getCurrentWorkspaceId()))
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
 export function getWebhook(webhookId: string): WebhookDeliveryRecord | undefined {
-  return webhooks.get(webhookId);
+  const webhook = webhooks.get(webhookId);
+  if (!webhook) {
+    return undefined;
+  }
+
+  if (!isWorkspaceMatch(webhook.workspaceId, getCurrentWorkspaceId())) {
+    return undefined;
+  }
+
+  return webhook;
 }
 
 export async function updateWebhook(webhookId: string, updates: UpdateWebhookInput): Promise<WebhookDeliveryRecord | null> {
-  const existing = webhooks.get(webhookId);
+  const existing = getWebhook(webhookId);
   if (!existing) {
     return null;
   }
@@ -533,10 +556,24 @@ export async function updateWebhook(webhookId: string, updates: UpdateWebhookInp
     pendingWebhookIds.delete(updated.id);
   }
 
+  if (updated) {
+    appendAuditEvent({
+      workspaceId: updated.workspaceId,
+      action: 'webhook.updated',
+      resourceType: 'webhook',
+      resourceId: updated.id
+    }).catch(() => undefined);
+  }
+
   return webhooks.get(webhookId) ?? updated;
 }
 
 export async function deleteWebhook(webhookId: string): Promise<boolean> {
+  const existing = getWebhook(webhookId);
+  if (!existing) {
+    return false;
+  }
+
   const deleted = await persistWebhookDelete(webhookId);
   if (!deleted) {
     return false;
@@ -544,6 +581,12 @@ export async function deleteWebhook(webhookId: string): Promise<boolean> {
 
   webhooks.delete(webhookId);
   pendingWebhookIds.delete(webhookId);
+  appendAuditEvent({
+    workspaceId: existing.workspaceId,
+    action: 'webhook.deleted',
+    resourceType: 'webhook',
+    resourceId: existing.id
+  }).catch(() => undefined);
   return true;
 }
 
@@ -588,6 +631,7 @@ export async function triggerInboundWebhook(
   const now = new Date();
   const task: Task = {
     id: '',
+    workspaceId: inboundHooks[0]?.workspaceId ?? getCurrentWorkspaceIdOrDefault() ?? 'workspace-default',
     agentId: taskPayload.agentId,
     type: taskPayload.type,
     data: taskPayload.data ?? {},
@@ -624,6 +668,15 @@ export async function triggerInboundWebhook(
       timestamp: new Date(),
       attemptCount: (inboundHooks[0].attemptCount ?? 0) + 1
     });
+    appendAuditEvent({
+      workspaceId: inboundHooks[0].workspaceId,
+      action: 'webhook.inbound.processed',
+      resourceType: 'webhook',
+      resourceId: inboundHooks[0].id,
+      metadata: {
+        eventName
+      }
+    }).catch(() => undefined);
   }
 
   return {
@@ -661,6 +714,15 @@ export async function enqueueWebhookNotification(eventName: string, payload: Rec
       attemptCount: hook.attemptCount,
       nextAttemptAt: now
     });
+    appendAuditEvent({
+      workspaceId: hook.workspaceId,
+      action: 'webhook.outbound.queued',
+      resourceType: 'webhook',
+      resourceId: hook.id,
+      metadata: {
+        eventName
+      }
+    }).catch(() => undefined);
   }
 }
 

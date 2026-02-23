@@ -8,6 +8,7 @@ import { checkSupabaseReadiness } from '../lib/supabaseClient';
 import { getTaskQueueHealth } from './taskQueueService';
 import { getScheduleHealthSnapshot } from './scheduleService';
 import { getWebhookHealthSnapshot } from './webhookService';
+import { getCacheStats } from './cacheService';
 
 export interface DependencyCheck {
   ok: boolean;
@@ -32,6 +33,12 @@ export interface ReadinessSnapshot {
       totalWebhooks?: number;
       pendingDeliveries?: number;
       retryTickMs?: number;
+    };
+    cache: DependencyCheck & {
+      entries?: number;
+      hits?: number;
+      misses?: number;
+      evictions?: number;
     };
   };
   timestamp: string;
@@ -80,6 +87,17 @@ export async function getReadinessSnapshot(): Promise<ReadinessSnapshot> {
         totalWebhooks: snapshot.totalWebhooks,
         pendingDeliveries: snapshot.pendingDeliveries,
         retryTickMs: snapshot.retryTickMs
+      };
+    })(),
+    cache: (() => {
+      const snapshot = getCacheStats();
+      return {
+        ok: true,
+        detail: 'enabled',
+        entries: snapshot.entries,
+        hits: snapshot.hits,
+        misses: snapshot.misses,
+        evictions: snapshot.evictions
       };
     })()
   };

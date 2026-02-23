@@ -14,6 +14,7 @@ import {
 } from '../../types';
 import { redis } from '../../config/redis';
 import { emitRunEvent } from './socketService';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
 
 const CONVERSATION_KEY_PREFIX = 'conversation:';
 const CONVERSATION_INDEX_KEY = 'conversations:index';
@@ -28,6 +29,18 @@ const conversationMessages = new Map<string, ConversationMessage[]>();
 const runs = new Map<string, Run>();
 const runEvents = new Map<string, RunEvent[]>();
 
+function resolveWorkspaceId(): string {
+  return getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
+}
+
+function isConversationVisible(conversation: Conversation): boolean {
+  return isWorkspaceMatch(conversation.workspaceId, getCurrentWorkspaceId());
+}
+
+function isRunVisible(run: Run): boolean {
+  return isWorkspaceMatch(run.workspaceId, getCurrentWorkspaceId());
+}
+
 function generateId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -40,6 +53,7 @@ function deserializeConversation(raw: string): Conversation {
   const parsed = JSON.parse(raw) as Conversation;
   return {
     ...parsed,
+    workspaceId: parsed.workspaceId ?? 'workspace-default',
     createdAt: new Date(parsed.createdAt),
     updatedAt: new Date(parsed.updatedAt)
   };
@@ -57,6 +71,7 @@ function deserializeRun(raw: string): Run {
   const parsed = JSON.parse(raw) as Run;
   return {
     ...parsed,
+    workspaceId: parsed.workspaceId ?? 'workspace-default',
     startedAt: new Date(parsed.startedAt),
     endedAt: parsed.endedAt ? new Date(parsed.endedAt) : undefined
   };
@@ -66,6 +81,7 @@ function deserializeRunEvent(raw: string): RunEvent {
   const parsed = JSON.parse(raw) as RunEvent;
   return {
     ...parsed,
+    workspaceId: parsed.workspaceId,
     timestamp: new Date(parsed.timestamp)
   };
 }
@@ -213,11 +229,21 @@ export async function initializeConversationStore(): Promise<void> {
 
 export function listConversations(): Conversation[] {
   return Array.from(conversations.values())
+    .filter((conversation) => isConversationVisible(conversation))
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
 
 export function getConversation(conversationId: string): Conversation | undefined {
-  return conversations.get(conversationId);
+  const conversation = conversations.get(conversationId);
+  if (!conversation) {
+    return undefined;
+  }
+
+  if (!isConversationVisible(conversation)) {
+    return undefined;
+  }
+
+  return conversation;
 }
 
 export function createConversation(input?: {
@@ -227,6 +253,7 @@ export function createConversation(input?: {
   const now = new Date();
   const conversation: Conversation = {
     id: generateId('conv'),
+    workspaceId: resolveWorkspaceId(),
     title: input?.title?.trim() || 'Untitled Conversation',
     status: 'active',
     createdAt: now,
@@ -301,6 +328,7 @@ export function createRun(input: {
 
   const run: Run = {
     id: generateId('run'),
+    workspaceId: conversation.workspaceId ?? resolveWorkspaceId(),
     conversationId: input.conversationId,
     rootTaskId: input.rootTaskId,
     status: 'running',
@@ -318,11 +346,21 @@ export function createRun(input: {
 }
 
 export function getRun(runId: string): Run | undefined {
-  return runs.get(runId);
+  const run = runs.get(runId);
+  if (!run) {
+    return undefined;
+  }
+
+  if (!isRunVisible(run)) {
+    return undefined;
+  }
+
+  return run;
 }
 
 export function listRuns(): Run[] {
   return Array.from(runs.values())
+    .filter((run) => isRunVisible(run))
     .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
 }
 
@@ -360,6 +398,7 @@ export function appendRunEvent(input: {
 }): RunEvent {
   const event: RunEvent = {
     id: generateId('evt'),
+    workspaceId: getRun(input.runId)?.workspaceId ?? resolveWorkspaceId(),
     runId: input.runId,
     conversationId: input.conversationId,
     type: input.type,
@@ -378,16 +417,27 @@ export function appendRunEvent(input: {
 }
 
 export function listRunEvents(runId: string): RunEvent[] {
+  const run = getRun(runId);
+  if (!run) {
+    return [];
+  }
+
   return [...(runEvents.get(runId) ?? [])]
     .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
 
 export function listConversationEvents(conversationId: string, after?: string): RunEvent[] {
+  const conversation = getConversation(conversationId);
+  if (!conversation) {
+    return [];
+  }
+
   const parsed = after ? new Date(after) : null;
   const start = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
   const events = Array.from(runEvents.values())
     .flatMap((entries) => entries)
-    .filter((event) => event.conversationId === conversationId);
+    .filter((event) => event.conversationId === conversationId)
+    .filter((event) => isWorkspaceMatch(event.workspaceId, conversation.workspaceId));
 
   const filtered = start
     ? events.filter((event) => event.timestamp.getTime() > start.getTime())

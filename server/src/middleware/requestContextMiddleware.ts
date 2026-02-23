@@ -7,8 +7,10 @@ import { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { logger } from '../lib/logger';
 import { observeHttpRequest } from '../services/observabilityService';
+import { runWithRequestContext } from '../services/workspaceContextService';
 
 const REQUEST_ID_HEADER = 'x-request-id';
+const WORKSPACE_HEADER = 'x-workspace-id';
 
 function sanitizeRoutePath(path: string): string {
   if (!path || path === '/') {
@@ -28,6 +30,11 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
 
   req.requestId = requestId;
   res.setHeader(REQUEST_ID_HEADER, requestId);
+
+  const workspaceIdHeader = req.header(WORKSPACE_HEADER);
+  const workspaceId = workspaceIdHeader && workspaceIdHeader.trim().length > 0
+    ? workspaceIdHeader.trim()
+    : process.env.DEFAULT_WORKSPACE_ID;
 
   const startedAt = process.hrtime.bigint();
 
@@ -53,5 +60,12 @@ export function requestContextMiddleware(req: Request, res: Response, next: Next
     }, 'request.completed');
   });
 
-  next();
+  runWithRequestContext({
+    requestId,
+    workspaceId,
+    ipAddress: req.ip,
+    userAgent: req.header('user-agent') ?? undefined
+  }, () => {
+    next();
+  });
 }

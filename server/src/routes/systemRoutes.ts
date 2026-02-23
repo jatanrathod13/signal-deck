@@ -6,6 +6,9 @@
 import { Router, Request, Response } from 'express';
 import { redis } from '../../config/redis';
 import { getReadinessSnapshot } from '../services/readinessService';
+import { getRuntimePolicySnapshot } from '../services/runtimePolicyService';
+import { getCurrentWorkspaceId } from '../services/workspaceContextService';
+import { getQuotaUsage } from '../services/quotaService';
 
 const router = Router();
 
@@ -64,6 +67,29 @@ router.get('/ready', async (_req: Request, res: Response) => {
   return res.status(httpStatus).json({
     success: snapshot.status === 'ok',
     data: snapshot
+  });
+});
+
+router.get('/runtime-policies', (_req: Request, res: Response) => {
+  return res.status(200).json({
+    success: true,
+    data: getRuntimePolicySnapshot()
+  });
+});
+
+router.get('/quotas', async (req: Request, res: Response) => {
+  const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+  if (!workspaceId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Workspace context is required to query quotas'
+    });
+  }
+
+  const usage = await getQuotaUsage(workspaceId);
+  return res.status(200).json({
+    success: true,
+    data: usage
   });
 });
 

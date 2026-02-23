@@ -1,10 +1,14 @@
-# Environment Variable Contract (Phase 4)
+# Environment Variable Contract (Phase 5)
 
 ## Core Runtime
 - `PORT`: HTTP server port (default `3001`)
 - `REDIS_HOST`: Redis host (default `localhost`)
 - `REDIS_PORT`: Redis port (default `6379`)
 - `REDIS_PASSWORD`: Optional Redis password
+- `REDIS_MAX_RETRIES_PER_REQUEST`: Optional `ioredis` retry count (`null` or non-negative integer, default `null`)
+- `REDIS_ENABLE_OFFLINE_QUEUE`: Enable offline command queueing (`true|false`, default `false`)
+- `REDIS_CONNECT_TIMEOUT_MS`: Redis connect timeout in milliseconds (default `10000`)
+- `REDIS_RETRY_CAP_MS`: Retry backoff cap in milliseconds (default `2000`)
 - `LOG_LEVEL`: `fatal|error|warn|info|debug|trace|silent` (default `info`)
 
 ## Supabase Persistence
@@ -13,6 +17,7 @@
 - `SUPABASE_SECRET_KEY`: Preferred server secret key for admin operations
 - `SUPABASE_SERVICE_ROLE_KEY`: Legacy fallback key if `SUPABASE_SECRET_KEY` is not set
 - `DEFAULT_WORKSPACE_ID`: Workspace UUID used by current persistence bridge
+- `SUPABASE_READ_TIMEOUT_MS`: Supabase request timeout in milliseconds (default `10000`)
 
 ## Supabase AuthN/AuthZ
 - `FEATURE_SUPABASE_AUTH`: Enables JWT verification + workspace membership checks (`true|false`)
@@ -28,6 +33,18 @@
 ## Queue Settings
 - `TASK_JOB_ATTEMPTS`: BullMQ retries per job (default `1`)
 - `TASK_JOB_BACKOFF_DELAY_MS`: Exponential backoff seed delay (default `1000`)
+- `WORKER_CONCURRENCY`: Worker concurrency (default `10`)
+- `WORKER_RATE_LIMIT`: Worker per-second limiter max (default `10`)
+
+## Cache and Runtime Policy
+- `CACHE_DEFAULT_TTL_MS`: Default in-memory cache TTL in milliseconds (default `5000`)
+- `CACHE_MAX_ENTRIES`: Max cache entries before LRU-style eviction (default `500`)
+
+## Quotas
+- `FEATURE_QUOTA_ENFORCEMENT`: Enables workspace quota checks (`true|false`, default `true`)
+- `QUOTA_MAX_TASKS_PER_HOUR`: Max submitted tasks per workspace per hour (default `500`)
+- `QUOTA_MAX_RUNS_PER_DAY`: Max conversation runs per workspace per day (default `200`)
+- `QUOTA_USE_REDIS`: Use Redis counters instead of in-memory counters for quota windows (`true|false`, default `false`)
 
 ## Scheduler
 - `SCHEDULER_TICK_MS`: Fallback scheduler polling interval in milliseconds (default `10000`)

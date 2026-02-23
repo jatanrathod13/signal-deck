@@ -14,6 +14,9 @@ import {
   loadAgentsFromSupabase,
   saveAgentToSupabase
 } from './supabasePersistenceService';
+import { appendAuditEvent } from './auditService';
+import { invalidateCachePrefix } from './cacheService';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
 
 // Redis key prefix for agents
 const AGENT_KEY_PREFIX = 'agent:';
@@ -27,6 +30,14 @@ let agents: AgentRegistry = new Map();
 
 // Redis connection status
 let redisAvailable = false;
+
+function resolveAgentWorkspaceId(agent: Agent): string {
+  return agent.workspaceId ?? 'workspace-default';
+}
+
+function isVisibleInActiveWorkspace(agent: Agent): boolean {
+  return isWorkspaceMatch(resolveAgentWorkspaceId(agent), getCurrentWorkspaceId());
+}
 
 // Initialize Redis connection and load agents
 async function initializeRedis(): Promise<void> {
@@ -78,6 +89,9 @@ async function loadAgentsFromRedis(): Promise<void> {
               // Convert date strings back to Date objects
               agentData.createdAt = new Date(agentData.createdAt);
               agentData.updatedAt = new Date(agentData.updatedAt);
+              if (!agentData.workspaceId) {
+                agentData.workspaceId = getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
+              }
               agents.set(agentData.id, agentData);
             } catch (parseError) {
               console.error('Failed to parse agent data:', parseError);
@@ -174,9 +188,11 @@ class AgentService extends EventEmitter {
   deployAgent(name: string, type: string, config: Record<string, unknown>): Agent {
     const id = this.generateId();
     const now = new Date();
+    const workspaceId = getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
 
     const agent: Agent = {
       id,
+      workspaceId,
       name,
       type,
       config,
@@ -194,6 +210,17 @@ class AgentService extends EventEmitter {
 
     this.emit('agent:registered', { agentId: id, agent });
     emitAgentStatus(agent);
+    invalidateCachePrefix('agents:list:');
+    appendAuditEvent({
+      workspaceId,
+      action: 'agent.created',
+      resourceType: 'agent',
+      resourceId: id,
+      metadata: {
+        name: agent.name,
+        type: agent.type
+      }
+    }).catch(() => undefined);
 
     return agent;
   }
@@ -272,7 +299,16 @@ class AgentService extends EventEmitter {
    * @returns Agent object or undefined
    */
   getAgent(id: string): Agent | undefined {
-    return agents.get(id);
+    const agent = agents.get(id);
+    if (!agent) {
+      return undefined;
+    }
+
+    if (!isVisibleInActiveWorkspace(agent)) {
+      return undefined;
+    }
+
+    return agent;
   }
 
   /**
@@ -280,7 +316,8 @@ class AgentService extends EventEmitter {
    * @returns Array of all agents
    */
   listAgents(): Agent[] {
-    return Array.from(agents.values());
+    return Array.from(agents.values())
+      .filter((agent) => isVisibleInActiveWorkspace(agent));
   }
 
   /**
@@ -302,6 +339,13 @@ class AgentService extends EventEmitter {
     });
 
     this.emit('agent:deleted', { agentId: id });
+    invalidateCachePrefix('agents:list:');
+    appendAuditEvent({
+      workspaceId: resolveAgentWorkspaceId(agent),
+      action: 'agent.deleted',
+      resourceType: 'agent',
+      resourceId: agent.id
+    }).catch(() => undefined);
 
     return true;
   }
@@ -340,6 +384,13 @@ class AgentService extends EventEmitter {
 
     this.emit('agent:updated', { agentId: id, agent });
     emitAgentStatus(agent);
+    invalidateCachePrefix('agents:list:');
+    appendAuditEvent({
+      workspaceId: resolveAgentWorkspaceId(agent),
+      action: 'agent.updated',
+      resourceType: 'agent',
+      resourceId: agent.id
+    }).catch(() => undefined);
 
     return agent;
   }

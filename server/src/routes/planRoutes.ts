@@ -7,6 +7,8 @@ import { Router, Request, Response } from 'express';
 import { createAndStartPlan, getPlanById } from '../services/orchestratorService';
 import { listPlans, updateStepStatus } from '../services/planService';
 import { OrchestrationExecutionStrategy, TaskExecutionMode } from '../../types';
+import { getCurrentWorkspaceId } from '../services/workspaceContextService';
+import { QuotaExceededError } from '../services/quotaService';
 
 const router = Router();
 
@@ -65,7 +67,10 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
       executionMode,
       conversationId,
       runId,
-      metadata
+      metadata: {
+        ...(metadata ?? {}),
+        workspaceId: req.auth?.workspaceId ?? getCurrentWorkspaceId()
+      }
     });
 
     return res.status(201).json({
@@ -73,6 +78,19 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
       data: summary
     });
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create plan'

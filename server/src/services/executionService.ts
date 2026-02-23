@@ -401,7 +401,8 @@ async function buildTools(
           runId: task.runId,
           metadata: {
             createdByTaskId: task.id,
-            origin: 'createOrchestrationPlanTool'
+            origin: 'createOrchestrationPlanTool',
+            workspaceId: task.workspaceId
           }
         });
 
@@ -619,7 +620,8 @@ async function executeMockTask(task: Task): Promise<{
       runId: task.runId,
       metadata: {
         createdByTaskId: task.id,
-        origin: 'mockExecution'
+        origin: 'mockExecution',
+        workspaceId: task.workspaceId
       }
     });
 

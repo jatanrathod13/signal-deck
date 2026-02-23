@@ -14,6 +14,7 @@ import {
   triggerInboundWebhook,
   updateWebhook
 } from '../services/webhookService';
+import { QuotaExceededError } from '../services/quotaService';
 
 const router = Router();
 
@@ -56,6 +57,19 @@ router.post('/inbound/:eventName', async (req: Request<{ eventName: string }>, r
       data: result
     });
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
     const message = error instanceof Error ? error.message : 'Failed to process inbound webhook';
     const statusCode = message.includes('signature') ? 401 : 400;
     return res.status(statusCode).json({

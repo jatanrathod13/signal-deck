@@ -18,6 +18,7 @@ import toolRoutes from './routes/toolRoutes';
 import scheduleRoutes from './routes/scheduleRoutes';
 import systemRoutes from './routes/systemRoutes';
 import webhookRoutes from './routes/webhookRoutes';
+import governanceRoutes from './routes/governanceRoutes';
 import { initializeSocket } from './services/socketService';
 import { initializeAgentPersistence } from './services/agentService';
 import { bootstrapTaskStore } from './services/taskQueueService';
@@ -87,6 +88,9 @@ app.use('/api/webhooks', webhookRoutes);
 
 // Tool routes
 app.use('/api/tools', toolRoutes);
+
+// Governance routes
+app.use('/api/governance', governanceRoutes);
 
 // System routes
 app.use('/api/system', systemRoutes);

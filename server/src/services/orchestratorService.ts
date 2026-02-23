@@ -12,6 +12,7 @@ import {
 } from '../../types';
 import { createPlan, getPlan, getReadySteps, updatePlanStatus, updateStepStatus } from './planService';
 import { submitTask, getTask, linkChildTask } from './taskQueueService';
+import { getCurrentWorkspaceIdOrDefault } from './workspaceContextService';
 
 const DEFAULT_AUTO_PLAN_MAX_STEPS = 5;
 const MIN_AUTO_PLAN_STEPS = 2;
@@ -132,6 +133,9 @@ export async function createAndStartPlan(input: {
   const parentTaskId = typeof input.metadata?.parentTaskId === 'string'
     ? input.metadata.parentTaskId
     : undefined;
+  const workspaceId = typeof input.metadata?.workspaceId === 'string'
+    ? input.metadata.workspaceId
+    : getCurrentWorkspaceIdOrDefault();
 
   const prompts = input.stepPrompts && input.stepPrompts.length > 0
     ? input.stepPrompts
@@ -165,6 +169,7 @@ export async function createAndStartPlan(input: {
   for (const step of readySteps) {
     const task: Task = {
       id: '',
+      workspaceId,
       agentId: step.agentId,
       type: step.taskType,
       data: step.taskData,
@@ -177,7 +182,8 @@ export async function createAndStartPlan(input: {
       planId: plan.id,
       stepId: step.id,
       metadata: {
-        orchestration: true
+        orchestration: true,
+        workspaceId
       },
       conversationId: input.conversationId,
       runId: input.runId
@@ -226,8 +232,10 @@ export async function handleTaskCompletion(task: Task): Promise<void> {
       stepId: step.id,
       parentTaskId: task.id,
       metadata: {
-        orchestration: true
+        orchestration: true,
+        workspaceId: task.workspaceId
       },
+      workspaceId: task.workspaceId,
       conversationId: task.conversationId,
       runId: task.runId
     };

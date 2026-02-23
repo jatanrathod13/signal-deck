@@ -20,6 +20,8 @@ import {
 import { listAgents } from '../services/agentService';
 import { submitTask } from '../services/taskQueueService';
 import { Task, getFeatureFlags } from '../../types';
+import { enforceRunStartQuota, QuotaExceededError } from '../services/quotaService';
+import { getCurrentWorkspaceId } from '../services/workspaceContextService';
 
 const router = Router();
 
@@ -158,6 +160,9 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
   }
 
   try {
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId() ?? 'workspace-default';
+    await enforceRunStartQuota(workspaceId);
+
     const userMessage = addConversationMessage({
       conversationId: conversation.id,
       role: 'user',
@@ -200,6 +205,7 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
     const now = new Date();
     const task: Task = {
       id: '',
+      workspaceId,
       agentId: defaultAgentId,
       type: parsed.data.taskType || 'conversation-message',
       data: {
@@ -240,6 +246,19 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
       }
     });
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to submit conversation message'
