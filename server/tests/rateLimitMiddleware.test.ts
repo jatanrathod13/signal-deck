@@ -47,4 +47,18 @@ describe('httpRateLimitMiddleware', () => {
 
     expect(requests.every((response) => response.status === 200)).toBe(true);
   });
+
+  it('ignores untrusted workspace header when auth context is absent', async () => {
+    const app = express();
+    app.use(httpRateLimitMiddleware);
+    app.get('/test', (_req: Request, res: Response) => res.status(200).json({ ok: true }));
+
+    const first = await request(app).get('/test').set('x-workspace-id', 'workspace-a');
+    const second = await request(app).get('/test').set('x-workspace-id', 'workspace-b');
+    const third = await request(app).get('/test').set('x-workspace-id', 'workspace-c');
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(third.status).toBe(429);
+  });
 });

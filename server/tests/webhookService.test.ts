@@ -24,6 +24,7 @@ describe('webhookService', () => {
     process.env.WEBHOOK_RETRY_TICK_MS = '20';
     process.env.WEBHOOK_RETRY_BASE_SECONDS = '1';
     process.env.WEBHOOK_REQUEST_TIMEOUT_MS = '1000';
+    delete process.env.ALLOW_UNREGISTERED_INBOUND_WEBHOOKS;
     jest.clearAllMocks();
     resetWebhookStateForTests();
   });
@@ -32,6 +33,7 @@ describe('webhookService', () => {
     await stopWebhookService();
     resetWebhookStateForTests();
     jest.useRealTimers();
+    delete process.env.ALLOW_UNREGISTERED_INBOUND_WEBHOOKS;
   });
 
   it('accepts signed inbound webhooks and submits a task', async () => {
@@ -59,6 +61,21 @@ describe('webhookService', () => {
 
     expect(result.taskId).toBe('task-webhook-1');
     expect(submitTaskMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unregistered inbound webhook without authenticated workspace context', async () => {
+    process.env.ALLOW_UNREGISTERED_INBOUND_WEBHOOKS = 'true';
+
+    await expect(triggerInboundWebhook(
+      'agent.triggered',
+      {
+        task: {
+          agentId: 'agent-1',
+          type: 'webhook-task'
+        }
+      },
+      undefined
+    )).rejects.toThrow('authenticated workspace context');
   });
 
   it('retries outbound webhook delivery after failure', async () => {
@@ -97,5 +114,40 @@ describe('webhookService', () => {
     expect(updated?.status).toBe('delivered');
     expect(updated?.responseStatus).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('resets outbound attemptCount when a new event is queued', async () => {
+    jest.useFakeTimers();
+    await initializeWebhookService();
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      status: 500,
+      text: async () => 'upstream error'
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const webhook = await createWebhook({
+      direction: 'outbound',
+      eventName: 'task.completed',
+      targetUrl: 'https://example.com/hooks/task-completed',
+      maxAttempts: 3,
+      status: 'failed'
+    });
+
+    await updateWebhook(webhook.id, { status: 'pending' });
+    await enqueueWebhookNotification('task.completed', {
+      taskId: 'task-111',
+      status: 'completed'
+    });
+    await jest.advanceTimersByTimeAsync(50);
+
+    await enqueueWebhookNotification('task.completed', {
+      taskId: 'task-456',
+      status: 'completed'
+    });
+
+    const updated = getWebhook(webhook.id);
+    expect(updated?.status).toBe('pending');
+    expect(updated?.attemptCount).toBe(0);
   });
 });

@@ -300,7 +300,12 @@ async function triggerSchedule(schedule: ScheduleRecord): Promise<void> {
     const updated = await recordScheduleRun(schedule, {
       lastRunAt: startedAt,
       nextRunAt,
-      lastRunStatus: 'succeeded'
+      lastRunStatus: 'succeeded',
+      metadata: {
+        ...(schedule.metadata ?? {}),
+        failureCount: 0,
+        lastFailure: undefined
+      }
     });
 
     emitScheduleTriggered({
@@ -316,8 +321,9 @@ async function triggerSchedule(schedule: ScheduleRecord): Promise<void> {
       ? Number(schedule.metadata.failureCount)
       : 0;
     const nextFailureCount = attempts + 1;
+    const isExhausted = nextFailureCount >= schedule.retryLimit;
     const retryAt = estimateRetryAt(startedAt, schedule.retryBackoffSeconds, nextFailureCount);
-    const nextRunAt = schedule.enabled ? retryAt : undefined;
+    const nextRunAt = schedule.enabled && !isExhausted ? retryAt : undefined;
 
     const updated = await recordScheduleRun(schedule, {
       lastRunAt: startedAt,

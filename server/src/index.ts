@@ -43,7 +43,7 @@ const app: Express = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(requestContextMiddleware);
-app.use('/api', httpRateLimitMiddleware, supabaseAuthMiddleware);
+app.use('/api', supabaseAuthMiddleware, httpRateLimitMiddleware);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {

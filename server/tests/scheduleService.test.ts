@@ -85,4 +85,26 @@ describe('scheduleService', () => {
     expect(deleted).toBe(true);
     expect(getSchedule(schedule.id)).toBeUndefined();
   });
+
+  it('stops scheduling retries after retryLimit is reached', async () => {
+    submitTaskMock.mockRejectedValue(new Error('queue offline'));
+
+    const schedule = await createSchedule({
+      name: 'Retry capped',
+      cronExpression: '*/5 * * * *',
+      timezone: 'UTC',
+      retryLimit: 1,
+      payload: {
+        agentId: 'agent-1',
+        type: 'scheduled-task'
+      }
+    });
+
+    await expect(triggerScheduleNow(schedule.id)).resolves.toEqual({ taskQueued: true });
+
+    const updated = getSchedule(schedule.id);
+    expect(updated?.lastRunStatus).toBe('failed');
+    expect(updated?.nextRunAt).toBeUndefined();
+    expect(updated?.metadata?.failureCount).toBe(1);
+  });
 });

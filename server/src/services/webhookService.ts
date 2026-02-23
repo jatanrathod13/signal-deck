@@ -593,7 +593,10 @@ export async function deleteWebhook(webhookId: string): Promise<boolean> {
 export async function triggerInboundWebhook(
   eventName: string,
   payload: Record<string, unknown>,
-  signatureHeader: string | undefined
+  signatureHeader: string | undefined,
+  options?: {
+    authenticatedWorkspaceId?: string;
+  }
 ): Promise<{ taskId: string; webhookId?: string }> {
   const inboundHooks = listWebhooks().filter((hook) => (
     hook.direction === 'inbound'
@@ -601,8 +604,15 @@ export async function triggerInboundWebhook(
       && hook.status !== 'disabled'
   ));
 
-  if (inboundHooks.length === 0 && process.env.ALLOW_UNREGISTERED_INBOUND_WEBHOOKS !== 'true') {
-    throw new Error('No matching inbound webhook registered for this event');
+  const allowUnregisteredInbound = process.env.ALLOW_UNREGISTERED_INBOUND_WEBHOOKS === 'true';
+  if (inboundHooks.length === 0) {
+    if (!allowUnregisteredInbound) {
+      throw new Error('No matching inbound webhook registered for this event');
+    }
+
+    if (!options?.authenticatedWorkspaceId) {
+      throw new Error('Unregistered inbound webhooks require authenticated workspace context');
+    }
   }
 
   if (inboundHooks.length > 0) {
@@ -623,6 +633,11 @@ export async function triggerInboundWebhook(
     }
   }
 
+  const workspaceId = inboundHooks[0]?.workspaceId ?? options?.authenticatedWorkspaceId;
+  if (!workspaceId) {
+    throw new Error('Unable to resolve workspace for inbound webhook');
+  }
+
   const taskPayload = parseInboundTaskPayload(payload);
   if (!taskPayload.agentId || !taskPayload.type) {
     throw new Error('Inbound webhook payload must include task.agentId and task.type');
@@ -631,7 +646,7 @@ export async function triggerInboundWebhook(
   const now = new Date();
   const task: Task = {
     id: '',
-    workspaceId: inboundHooks[0]?.workspaceId ?? getCurrentWorkspaceIdOrDefault() ?? 'workspace-default',
+    workspaceId,
     agentId: taskPayload.agentId,
     type: taskPayload.type,
     data: taskPayload.data ?? {},
@@ -696,6 +711,7 @@ export async function enqueueWebhookNotification(eventName: string, payload: Rec
     const now = new Date();
     await patchWebhook(hook.id, {
       status: 'pending',
+      attemptCount: 0,
       payload,
       nextAttemptAt: now,
       error: undefined,
