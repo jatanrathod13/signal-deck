@@ -36,11 +36,51 @@ import { getReadinessSnapshot } from './services/readinessService';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
+function getAllowedCorsOrigins(): string[] {
+  const configured = process.env.CORS_ALLOWED_ORIGINS
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+  if (configured && configured.length > 0) {
+    return configured;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    return ['http://localhost:3000', 'http://localhost:5173'];
+  }
+
+  return [];
+}
+
+const allowedOrigins = getAllowedCorsOrigins();
+
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+
+  return false;
+}
+
 // Create Express app
 const app: Express = express();
 
 // Middleware
-app.use(cors({ origin: '*' }));
+app.use(cors({
+  origin(origin, callback) {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  }
+}));
 app.use(express.json());
 app.use(requestContextMiddleware);
 app.use('/api', supabaseAuthMiddleware, httpRateLimitMiddleware);
@@ -115,7 +155,14 @@ const server = http.createServer(app);
 // Create Socket.IO server with CORS
 const io = new Server(server, {
   cors: {
-    origin: '*'
+    origin(origin, callback) {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Socket CORS blocked for origin: ${origin}`));
+    }
   }
 });
 
