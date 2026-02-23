@@ -111,40 +111,6 @@ begin
 end;
 $$;
 
-create or replace function public.is_workspace_member(target_workspace_id uuid)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.workspace_members wm
-    where wm.workspace_id = target_workspace_id
-      and wm.user_id = auth.uid()
-  );
-$$;
-
-create or replace function public.has_workspace_role(
-  target_workspace_id uuid,
-  allowed_roles public.workspace_role[]
-)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.workspace_members wm
-    where wm.workspace_id = target_workspace_id
-      and wm.user_id = auth.uid()
-      and wm.role = any(allowed_roles)
-  );
-$$;
-
 create table if not exists public.workspaces (
   id uuid primary key default gen_random_uuid(),
   slug citext not null unique,
@@ -404,6 +370,40 @@ drop trigger if exists trg_schedules_set_updated_at on public.schedules;
 create trigger trg_schedules_set_updated_at
 before update on public.schedules
 for each row execute function public.set_updated_at();
+
+create or replace function public.is_workspace_member(target_workspace_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.workspace_members wm
+    where wm.workspace_id = target_workspace_id
+      and wm.user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.has_workspace_role(
+  target_workspace_id uuid,
+  allowed_roles public.workspace_role[]
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.workspace_members wm
+    where wm.workspace_id = target_workspace_id
+      and wm.user_id = auth.uid()
+      and wm.role = any(allowed_roles)
+  );
+$$;
 
 alter table public.workspaces enable row level security;
 alter table public.workspace_members enable row level security;

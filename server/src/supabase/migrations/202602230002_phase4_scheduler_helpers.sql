@@ -88,7 +88,7 @@ begin
   end if;
 
   command_sql := format(
-    $$select public.enqueue_schedule_run('%s'::uuid)$$,
+    'select public.enqueue_schedule_run(''%s''::uuid)',
     p_schedule_id
   );
 
