@@ -147,3 +147,17 @@ Completed
   - Confirmed dependency ownership and acceptance criteria mapping:
     - Runtime/Infra, Backend/Data, AI Platform, Security/Compliance, SRE/Operations, Frontend/Product, Platform Integrations.
   - Final milestone tracker published for phases 1-7 with evidence links.
+
+## Post-Implementation Verification (2026-02-23)
+- End-to-end roadmap verification is now complete for local runtime, browser flows, and Supabase schema bootstrap.
+- Verified:
+  - Server build/test (`npm run build`, `npm test`) and client build (`npm run build`) pass on this branch.
+  - Feature-flagged Phase 6 capabilities (integration catalog, DLQ, rate limit, circuit breaker, DAG, dynamic pools, CLI/SDK, readiness review, OpenAPI) are exercised and returning expected behavior.
+  - Playwright-driven UI checks cover agent deploy, workspace execution, observability updates, schedules, and webhooks.
+  - Supabase temporary project provisioning and migration apply path have been validated with MCP tools.
+- Deployability defects found and fixed during verification:
+  - `202602230001_initial_m1_schema.sql`: moved `is_workspace_member`/`has_workspace_role` function creation to after `workspace_members` exists.
+  - `202602230002_phase4_scheduler_helpers.sql`: fixed invalid nested dollar-quoting in `upsert_workspace_schedule_job` command SQL formatting.
+  - `server/package.json`: `npm run dev` now uses `ts-node --files src/index.ts` to load ambient type augmentations reliably.
+- Remaining rollout precondition:
+  - Full app-level Supabase persistence/auth runtime smoke still requires a project server-side key (`SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY`) in environment.

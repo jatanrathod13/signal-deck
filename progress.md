@@ -192,6 +192,33 @@
   - `/Users/jatanrathod/Applications/context-engineering-kit-test/findings.md` (updated)
   - `/Users/jatanrathod/Applications/context-engineering-kit-test/progress.md` (updated)
 
+### Phase 7b: End-to-End Verification and Hardening
+- **Status:** complete
+- Actions taken:
+  - Executed full roadmap verification across local build/test, runtime APIs, browser checks, and Supabase schema bootstrap.
+  - Provisioned temporary Supabase project via MCP:
+    - Project: `roadmap-e2e-verify`
+    - Ref: `mgwyqpswiufybnqxhqua`
+  - Applied and validated roadmap migrations in target project:
+    - `202602230001_initial_m1_schema` (applied as part1/part2 during validation).
+    - `202602230002_phase4_scheduler_helpers` (applied as fixed migration).
+    - `202602230003_phase5_governance_quota`.
+  - Validated resulting schema characteristics:
+    - Expected public tables present.
+    - RLS enabled on workspace-scoped tables.
+    - Policy sets and helper functions present (`is_workspace_member`, `has_workspace_role`, scheduler helpers).
+  - Identified and fixed bootstrap blockers:
+    - Reordered helper function creation in `202602230001_initial_m1_schema.sql`.
+    - Corrected nested dollar-quoting in `202602230002_phase4_scheduler_helpers.sql`.
+    - Fixed `npm run dev` startup reliability (`ts-node --files`) in `server/package.json`.
+- Files created/modified:
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/supabase/migrations/202602230001_initial_m1_schema.sql` (updated)
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/supabase/migrations/202602230002_phase4_scheduler_helpers.sql` (updated)
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/package.json` (updated)
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/task_plan.md` (updated)
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/findings.md` (updated)
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/progress.md` (updated)
+
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
@@ -211,6 +238,11 @@
 | Phase 6 server test suite | `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` | Existing + new reliability/orchestration tests pass | Passed (24 suites, 135 tests) | Pass |
 | Phase 6 client build | `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` | Client bundle remains healthy after server-side contract additions | Passed (`tsc` + `vite build`) | Pass |
 | Phase 7 handoff package validation | `rg`, `sed` review across handoff + planning artifacts | Milestone tracker and dependency/owner/acceptance criteria are explicitly published | Confirmed in `PHASE7_FINAL_HANDOFF.md` and planning files | Pass |
+| Post-handoff server type safety | `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` | No regressions after migration/dev-runtime fixes | Passed (`tsc`) | Pass |
+| Post-handoff server test suite | `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` | No regressions after migration/dev-runtime fixes | Passed (24 suites, 135 tests) | Pass |
+| Post-handoff client build | `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` | Client remains stable after verification fixes | Passed (`tsc` + `vite build`) | Pass |
+| Supabase migration bootstrap validation | Supabase MCP `apply_migration` to `mgwyqpswiufybnqxhqua` | Roadmap schema and helpers apply cleanly to empty-ish project | Passed after two migration fixes; tables/RLS/policies/functions verified | Pass |
+| Supabase schema integrity check | Supabase MCP `list_tables`, `execute_sql`, `list_migrations` | Expected workspace-scoped tables, policies, and helper functions exist | Confirmed | Pass |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |
@@ -221,6 +253,9 @@
 | 2026-02-23 00:18 | `tsc` failed in `supabaseClient` (`RequestInfo` type not found) | 1 | Replaced with `Parameters<typeof fetch>` typed signature |
 | 2026-02-23 00:25 | `taskQueueService` tests failed due Redis counter access in quota service | 1 | Added Redis error fallback to in-memory quota counters |
 | 2026-02-23 11:10 | `tsc` failed in Phase 6 SDK/orchestrator updates (unknown payload type, optional workspace id, assignment strategy typing) | 1 | Added typed API envelope casting, explicit workspace fallback (`workspace-default`), and narrowed assignment strategy literals |
+| 2026-02-23 12:15 | Initial schema migration failed on clean Supabase bootstrap (`relation public.workspace_members does not exist`) | 1 | Moved `is_workspace_member` and `has_workspace_role` creation to after table creation in `202602230001_initial_m1_schema.sql` |
+| 2026-02-23 12:17 | Scheduler helper migration failed with SQL syntax error at nested dollar-quoted `command_sql` | 1 | Replaced nested `$$...$$` format string with escaped single-quoted string in `202602230002_phase4_scheduler_helpers.sql` |
+| 2026-02-23 12:20 | `npm run dev` failed to load ambient request typing under `ts-node` | 1 | Updated `server/package.json` dev script to `ts-node --files src/index.ts` |
 
 ## 5-Question Reboot Check
 | Question | Answer |

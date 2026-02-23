@@ -9,7 +9,7 @@
     "test:coverage": "jest --coverage",
     "build": "tsc",
     "start": "node dist/src/index.js",
-    "dev": "ts-node src/index.ts",
+    "dev": "ts-node --files src/index.ts",
     "migrations:list": "node scripts/listMigrations.js",
     "cli": "ts-node src/cli/orchestratorCli.ts"
   },
