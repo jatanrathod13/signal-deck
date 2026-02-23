@@ -10,7 +10,8 @@ Signal Deck turns a plain-language objective into a planned, observable, governa
 4. Gate risky actions with approvals.
 5. Track runs with timelines, artifacts, and reliability signals.
 
-![Signal Deck screenshot](./docs/assets/signal-deck-ui.png)
+![Signal Deck desktop screenshot](./docs/assets/signal-deck-ui.png)
+![Signal Deck mobile screenshot](./docs/assets/signal-deck-ui-mobile.png)
 
 ## Why this project exists
 
@@ -119,6 +120,39 @@ Environment details: `server/docs/ENVIRONMENT_CONTRACT.md`
 Signal Deck is now focused on one north-star outcome:
 
 **Objective -> deterministic plan -> governed execution -> verifiable result**
+
+## Design System Upgrade Plan
+
+Signal Deck UI is being upgraded to an **Industrial Editorial** visual system so the product reads like a production control plane instead of a generic dashboard.
+
+### V1 rollout scope
+
+- App shell (left navigation rail + command-focused top bar + mobile bottom rail)
+- Workspace surface (`Conversations`, `Orchestrator Session`, `Run Events`)
+- Tasks surface (`Queue overview`, filtering, operational task cards)
+
+### Guiding principles
+
+- Hierarchy first: typography and layout should immediately communicate priority.
+- Signal clarity: status, risk, and runtime state must be scannable at a glance.
+- Motion restraint: one orchestrated page-load reveal plus purposeful interaction transitions.
+- System consistency: shared tokens and style contracts, not one-off component styling.
+
+### Contribution guardrails
+
+- Use token-driven styling from `client/src/index.css` (`--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, `--motion-*`).
+- Avoid generic UI defaults (for example: default font stacks, purple-on-white gradients, interchangeable card grids).
+- Do not introduce ad-hoc visual constants when an existing token or utility class can be reused.
+- Maintain keyboard accessibility, visible focus states, and reduced-motion behavior.
+
+### Acceptance checklist
+
+- Shell, Workspace, and Tasks render with one coherent visual language.
+- Status semantics are readable in both compact and expanded task/workspace states.
+- Desktop and mobile layouts remain usable without overflow regressions.
+- No backend contract changes and no functional regressions in core workflows.
+
+Future deep-dive docs can be added under `docs/` as this system expands to remaining tabs.
 
 Roadmap: `ROADMAP.md`  
 Product vision: `docs/PRODUCT_DIRECTION.md`  
