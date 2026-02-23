@@ -128,6 +128,15 @@ function getWebhookSecret(webhook: WebhookDeliveryRecord): string | null {
   return null;
 }
 
+function requireInboundWebhookSignature(): boolean {
+  const configured = process.env.REQUIRE_INBOUND_WEBHOOK_SIGNATURE;
+  if (configured === 'false') {
+    return false;
+  }
+
+  return true;
+}
+
 function buildSignature(payload: string, secret: string): string {
   return createHmac('sha256', secret).update(payload).digest('hex');
 }
@@ -618,6 +627,16 @@ export async function triggerInboundWebhook(
   if (inboundHooks.length > 0) {
     const payloadString = JSON.stringify(payload);
     const hooksWithSecret = inboundHooks.filter((hook) => Boolean(getWebhookSecret(hook)));
+    if (requireInboundWebhookSignature()) {
+      if (hooksWithSecret.length === 0) {
+        throw new Error('Inbound webhook signature is required but no webhook secret is configured');
+      }
+
+      if (!signatureHeader) {
+        throw new Error('Missing x-webhook-signature header');
+      }
+    }
+
     if (hooksWithSecret.length > 0) {
       const matched = hooksWithSecret.some((hook) => {
         const secret = getWebhookSecret(hook);

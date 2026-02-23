@@ -78,6 +78,45 @@ describe('webhookService', () => {
     )).rejects.toThrow('authenticated workspace context');
   });
 
+  it('rejects signed inbound webhook calls when signature header is missing', async () => {
+    await createWebhook({
+      direction: 'inbound',
+      eventName: 'agent.triggered',
+      metadata: {
+        secret: 'test-secret'
+      }
+    });
+
+    await expect(triggerInboundWebhook(
+      'agent.triggered',
+      {
+        task: {
+          agentId: 'agent-1',
+          type: 'webhook-task'
+        }
+      },
+      undefined
+    )).rejects.toThrow('Missing x-webhook-signature header');
+  });
+
+  it('rejects inbound webhook calls when signature is required but no secret exists', async () => {
+    await createWebhook({
+      direction: 'inbound',
+      eventName: 'agent.triggered'
+    });
+
+    await expect(triggerInboundWebhook(
+      'agent.triggered',
+      {
+        task: {
+          agentId: 'agent-1',
+          type: 'webhook-task'
+        }
+      },
+      'any-signature'
+    )).rejects.toThrow('signature is required');
+  });
+
   it('retries outbound webhook delivery after failure', async () => {
     jest.useFakeTimers();
     await initializeWebhookService();
