@@ -204,3 +204,54 @@
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (19 suites, 120 tests).
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` passed.
+
+## Phase 6 Completion Update (2026-02-23)
+- IoT/MCP/provider integrations behind feature flags:
+  - Added integration catalog service at `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/integrationCatalogService.ts`.
+  - Added `GET /api/system/integrations` for category-filtered templates (`iot|mcp|provider`).
+  - Extended feature-flag surface in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/types/index.ts`:
+    - `FEATURE_IOT_INTEGRATIONS`
+    - `FEATURE_EXTERNAL_AI_PROVIDERS`
+    - `FEATURE_MCP_SDK_CLIENT` gating now enforced before MCP tool loading.
+  - Provider catalog exposure now requires both `FEATURE_PROVIDER_TOOLS` and `FEATURE_EXTERNAL_AI_PROVIDERS`.
+- CLI/SDK/docs and reliability controls:
+  - Added SDK client:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/sdk/orchestrationClient.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/sdk/index.ts`
+  - Added CLI:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/cli/orchestratorCli.ts`
+    - `npm run cli` in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/package.json`.
+  - Added API docs endpoint:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/apiDocsService.ts`
+    - `GET /api/system/openapi.json`.
+  - Added reliability controls:
+    - HTTP rate limiting middleware (`FEATURE_HTTP_RATE_LIMIT`) in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/middleware/rateLimitMiddleware.ts`.
+    - Circuit breaker service (`FEATURE_CIRCUIT_BREAKERS`) in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/circuitBreakerService.ts`.
+    - Dead letter queue service (`FEATURE_DEAD_LETTER_QUEUE`) in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/deadLetterQueueService.ts`.
+    - Worker now records failed tasks to DLQ in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/worker/taskWorker.ts`.
+- Advanced orchestration:
+  - Added DAG orchestration with cycle/dependency validation in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/orchestratorService.ts`.
+  - Added `POST /api/plans/dag` in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/routes/planRoutes.ts`.
+  - Added load-aware `least_loaded` assignment strategy for dynamic pools behind `FEATURE_DYNAMIC_AGENT_POOLS`.
+  - Extended orchestration strategy union to include `dag`.
+- Production readiness review and staged rollout:
+  - Added readiness review service and endpoint:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/productionReadinessService.ts`
+    - `GET /api/system/readiness/review`.
+  - Expanded runtime policy/readiness surfaces with reliability snapshots:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/runtimePolicyService.ts`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/readinessService.ts`.
+  - Added docs:
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/PHASE6_CLI_SDK_GUIDE.md`
+    - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/PHASE6_ROLLOUT_RUNBOOK.md`
+    - Updated `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/ENVIRONMENT_CONTRACT.md`.
+- Test additions:
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/integrationCatalogService.test.ts`
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/rateLimitMiddleware.test.ts`
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/circuitBreakerService.test.ts`
+  - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/deadLetterQueueService.test.ts`
+  - Expanded orchestration tests in `/Users/jatanrathod/Applications/context-engineering-kit-test/server/tests/orchestratorService.test.ts`.
+- Verification:
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (24 suites, 135 tests).
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` passed.

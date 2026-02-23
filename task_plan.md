@@ -4,7 +4,7 @@
 Create an implementation-ready plan for `ROADMAP.md` that is grounded in the current codebase and verified with current Supabase and Vercel AI SDK guidance.
 
 ## Current Phase
-Phase 5
+Phase 7
 
 ## Phases
 
@@ -46,11 +46,11 @@ Phase 5
 - **Status:** complete
 
 ### Phase 6: Priority 4+5 (Month 4+) Build Plan
-- [ ] Add IoT/MCP/provider integrations behind feature flags
-- [ ] Add CLI/SDK/docs and reliability controls (DLQ/rate limit/circuit breaker)
-- [ ] Add advanced orchestration (DAG, dynamic pools)
-- [ ] Production readiness review and staged rollout
-- **Status:** pending
+- [x] Add IoT/MCP/provider integrations behind feature flags
+- [x] Add CLI/SDK/docs and reliability controls (DLQ/rate limit/circuit breaker)
+- [x] Add advanced orchestration (DAG, dynamic pools)
+- [x] Production readiness review and staged rollout
+- **Status:** complete
 
 ### Phase 7: Delivery and Handoff
 - [ ] Publish final implementation plan + milestone trackers
@@ -80,6 +80,7 @@ Phase 5
 |-------|---------|------------|
 | `client` build type mismatch in schedule payload typing | 1 | Updated client API payload contract to allow partial payload and keep server-side validation authoritative |
 | Webhook retry test timing race with fake timers | 1 | Reworked test timing to use async timer advancement and final-state assertions |
+| Phase 6 server build type errors in SDK payload typing/workspace fallback | 1 | Added typed API envelope handling, widened request body type to `unknown`, and defaulted orchestration workspace IDs to `workspace-default` |
 
 ## Notes
 - Current repo already has strong run intelligence/evaluator/governance scaffolding in `server/src/services`.
@@ -117,3 +118,26 @@ Phase 5
     - `server/src/lib/supabaseClient.ts` timeout-aware fetch wrapper.
   - Phase 5 schema migration:
     - `server/src/supabase/migrations/202602230003_phase5_governance_quota.sql`.
+- Phase 6 completion artifacts now include:
+  - Feature-flagged integration catalog + visibility:
+    - `server/src/services/integrationCatalogService.ts`
+    - `GET /api/system/integrations`
+    - Expanded tool catalog flags in `server/src/routes/toolRoutes.ts`.
+  - Reliability controls:
+    - HTTP rate limiting middleware: `server/src/middleware/rateLimitMiddleware.ts`
+    - Circuit breaker service: `server/src/services/circuitBreakerService.ts` and MCP wrapping in `server/src/services/mcpClientService.ts`
+    - Dead letter queue service + APIs: `server/src/services/deadLetterQueueService.ts`, `GET /api/system/dlq`, `POST /api/system/dlq/:entryId/requeue`.
+  - Advanced orchestration:
+    - DAG creation path and validation: `createAndStartDagPlan` in `server/src/services/orchestratorService.ts`
+    - DAG API route: `POST /api/plans/dag`
+    - Dynamic pool load-aware assignment (`least_loaded`) guarded by `FEATURE_DYNAMIC_AGENT_POOLS`.
+  - CLI/SDK/docs + readiness rollout:
+    - SDK: `server/src/sdk/orchestrationClient.ts`
+    - CLI: `server/src/cli/orchestratorCli.ts` and `npm run cli`
+    - API docs endpoint: `GET /api/system/openapi.json`
+    - Production readiness review endpoint: `GET /api/system/readiness/review`
+    - Runbooks: `server/docs/PHASE6_CLI_SDK_GUIDE.md`, `server/docs/PHASE6_ROLLOUT_RUNBOOK.md`
+  - Verification:
+    - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
+    - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (24 suites, 135 tests).
+    - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` passed.

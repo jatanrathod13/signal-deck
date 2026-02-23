@@ -4,7 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { createAndStartPlan, getPlanById } from '../services/orchestratorService';
+import { createAndStartDagPlan, createAndStartPlan, DagStepDefinition, getPlanById } from '../services/orchestratorService';
 import { listPlans, updateStepStatus } from '../services/planService';
 import { OrchestrationExecutionStrategy, TaskExecutionMode } from '../../types';
 import { getCurrentWorkspaceId } from '../services/workspaceContextService';
@@ -20,6 +20,19 @@ interface CreatePlanBody {
   maxSteps?: number;
   teamAgentIds?: string[];
   executionStrategy?: OrchestrationExecutionStrategy;
+  assignmentStrategy?: 'round_robin' | 'least_loaded';
+  executionMode?: TaskExecutionMode;
+  conversationId?: string;
+  runId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface CreateDagPlanBody {
+  objective: string;
+  defaultAgentId: string;
+  steps: DagStepDefinition[];
+  teamAgentIds?: string[];
+  assignmentStrategy?: 'round_robin' | 'least_loaded';
   executionMode?: TaskExecutionMode;
   conversationId?: string;
   runId?: string;
@@ -36,6 +49,7 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
       maxSteps,
       teamAgentIds,
       executionStrategy,
+      assignmentStrategy,
       executionMode,
       conversationId,
       runId,
@@ -64,6 +78,7 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
       maxSteps,
       teamAgentIds,
       executionStrategy,
+      assignmentStrategy,
       executionMode,
       conversationId,
       runId,
@@ -94,6 +109,74 @@ router.post('/', async (req: Request<{}, {}, CreatePlanBody>, res: Response) => 
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create plan'
+    });
+  }
+});
+
+router.post('/dag', async (req: Request<{}, {}, CreateDagPlanBody>, res: Response) => {
+  try {
+    const {
+      objective,
+      defaultAgentId,
+      steps,
+      teamAgentIds,
+      assignmentStrategy,
+      executionMode,
+      conversationId,
+      runId,
+      metadata
+    } = req.body;
+
+    if (!objective || !defaultAgentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'objective and defaultAgentId are required'
+      });
+    }
+
+    if (!Array.isArray(steps) || steps.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'steps must be a non-empty array'
+      });
+    }
+
+    const summary = await createAndStartDagPlan({
+      objective,
+      defaultAgentId,
+      steps,
+      teamAgentIds,
+      assignmentStrategy,
+      executionMode,
+      conversationId,
+      runId,
+      metadata: {
+        ...(metadata ?? {}),
+        workspaceId: req.auth?.workspaceId ?? getCurrentWorkspaceId()
+      }
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: summary
+    });
+  } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to create DAG plan'
     });
   }
 });

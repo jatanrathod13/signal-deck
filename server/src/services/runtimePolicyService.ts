@@ -6,6 +6,9 @@
 import { getRedisConnectionPolicy } from '../../config/redis';
 import { getCacheStats } from './cacheService';
 import { getQuotaPolicy } from './quotaService';
+import { getFeatureFlags } from '../../types';
+import { getDeadLetterSnapshot } from './deadLetterQueueService';
+import { getCircuitBreakerSnapshot } from './circuitBreakerService';
 
 export interface RuntimePolicySnapshot {
   caching: {
@@ -26,6 +29,16 @@ export interface RuntimePolicySnapshot {
     };
   };
   quotas: ReturnType<typeof getQuotaPolicy>;
+  featureFlags: ReturnType<typeof getFeatureFlags>;
+  reliability: {
+    httpRateLimit: {
+      enabled: boolean;
+      windowMs: number;
+      maxRequests: number;
+    };
+    deadLetterQueue: ReturnType<typeof getDeadLetterSnapshot>;
+    circuitBreakers: ReturnType<typeof getCircuitBreakerSnapshot>;
+  };
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -43,6 +56,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 
 export function getRuntimePolicySnapshot(): RuntimePolicySnapshot {
   const cacheStats = getCacheStats();
+  const featureFlags = getFeatureFlags();
 
   return {
     caching: {
@@ -62,6 +76,16 @@ export function getRuntimePolicySnapshot(): RuntimePolicySnapshot {
         readTimeoutMs: parsePositiveInt(process.env.SUPABASE_READ_TIMEOUT_MS, 10000)
       }
     },
-    quotas: getQuotaPolicy()
+    quotas: getQuotaPolicy(),
+    featureFlags,
+    reliability: {
+      httpRateLimit: {
+        enabled: featureFlags.FEATURE_HTTP_RATE_LIMIT,
+        windowMs: parsePositiveInt(process.env.HTTP_RATE_LIMIT_WINDOW_MS, 60_000),
+        maxRequests: parsePositiveInt(process.env.HTTP_RATE_LIMIT_MAX_REQUESTS, 120)
+      },
+      deadLetterQueue: getDeadLetterSnapshot(),
+      circuitBreakers: getCircuitBreakerSnapshot()
+    }
   };
 }
