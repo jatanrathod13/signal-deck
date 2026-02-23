@@ -203,6 +203,7 @@ export type ApprovalStatus = 'pending' | 'approved' | 'denied' | 'timed_out';
 
 export interface ApprovalRequest {
   id: string;
+  workspaceId?: string;
   runId: string;
   toolName: string;
   reason: string;
@@ -276,6 +277,7 @@ export interface RunIntelligence {
 // Agent interface
 export interface Agent {
   id: string;
+  workspaceId?: string;
   name: string;
   type: string;
   config: AgentConfig;
@@ -287,6 +289,7 @@ export interface Agent {
 // Task interface
 export interface Task {
   id: string;
+  workspaceId?: string;
   agentId: string;
   type: string;
   data: Record<string, unknown>;
@@ -354,6 +357,7 @@ export interface WebhookDefinition {
 
 export interface Conversation {
   id: string;
+  workspaceId?: string;
   title: string;
   status: ConversationStatus;
   createdAt: Date;
@@ -374,6 +378,7 @@ export interface ConversationMessage {
 
 export interface Run {
   id: string;
+  workspaceId?: string;
   conversationId: string;
   rootTaskId?: string;
   status: RunStatus;
@@ -388,6 +393,7 @@ export interface Run {
 
 export interface RunEvent {
   id: string;
+  workspaceId?: string;
   runId: string;
   conversationId: string;
   type: RunEventType;
@@ -414,6 +420,7 @@ export interface PlanStep {
 
 export interface Plan {
   id: string;
+  workspaceId?: string;
   objective: string;
   status: PlanStatus;
   createdByTaskId?: string;

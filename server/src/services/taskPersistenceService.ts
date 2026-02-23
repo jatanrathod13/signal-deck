@@ -106,10 +106,10 @@ export async function deleteTask(taskId: string): Promise<void> {
   }
 }
 
-export async function getTaskByIdempotencyKey(idempotencyKey: string): Promise<string | null> {
+export async function getTaskByIdempotencyKey(idempotencyKey: string, workspaceId?: string): Promise<string | null> {
   if (isSupabasePersistenceEnabled()) {
     try {
-      return await getTaskIdByIdempotencyKeyFromSupabase(idempotencyKey);
+      return await getTaskIdByIdempotencyKeyFromSupabase(idempotencyKey, workspaceId);
     } catch (error) {
       console.warn('[TaskPersistence] Supabase idempotency lookup failed, falling back to Redis:', error);
     }

@@ -5,10 +5,14 @@
 
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
+import { getRedisConnectionPolicy } from '../../config/redis';
 import { Task, TaskStatus, TaskErrorType, TaskExecutionMode } from '../../types';
 import { emitTaskStatus } from './socketService';
 import { getTaskByIdempotencyKey, loadAllTasks, saveTask } from './taskPersistenceService';
 import { incrementMetric } from './metricsService';
+import { getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
+import { appendAuditEvent } from './auditService';
+import { enforceTaskSubmissionQuota } from './quotaService';
 
 // Redis connection for BullMQ
 let redisConnection: Redis | null = null;
@@ -34,10 +38,14 @@ const DEFAULT_BACKOFF_DELAY_MS = parsePositiveInt(process.env.TASK_JOB_BACKOFF_D
  */
 function getRedisConnection(): Redis {
   if (!redisConnection) {
+    const policy = getRedisConnectionPolicy();
     redisConnection = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379', 10),
-      maxRetriesPerRequest: 3,
+      host: policy.host,
+      port: policy.port,
+      password: policy.password,
+      maxRetriesPerRequest: policy.maxRetriesPerRequest ?? 3,
+      enableOfflineQueue: policy.enableOfflineQueue,
+      connectTimeout: policy.connectTimeoutMs,
       lazyConnect: true
     });
   }
@@ -91,6 +99,7 @@ export function setTaskQueue(queue: Queue): void {
 export async function bootstrapTaskStore(): Promise<void> {
   const persistedTasks = await loadAllTasks();
   for (const task of persistedTasks) {
+    task.workspaceId = task.workspaceId ?? getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
     let normalized = false;
 
     if (task.status === 'processing' && typeof task.error === 'string' && task.error.trim().length > 0) {
@@ -132,6 +141,7 @@ function createTask(
   const now = new Date();
   return {
     id: generateTaskId(),
+    workspaceId: getCurrentWorkspaceIdOrDefault() ?? 'workspace-default',
     agentId,
     type,
     data,
@@ -225,8 +235,24 @@ export function linkChildTask(parentTaskId: string, childTaskId: string): void {
  * @returns Promise<string> - The task ID
  */
 export async function submitTask(task: Task): Promise<string> {
+  const workspaceId = task.workspaceId ?? getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
+
+  try {
+    await enforceTaskSubmissionQuota(workspaceId);
+  } catch (error) {
+    appendAuditEvent({
+      workspaceId,
+      action: 'quota.exceeded',
+      resourceType: 'task',
+      metadata: {
+        reason: error instanceof Error ? error.message : 'quota exceeded'
+      }
+    }).catch(() => undefined);
+    throw error;
+  }
+
   if (task.idempotencyKey) {
-    const existingTaskId = await getTaskByIdempotencyKey(task.idempotencyKey);
+    const existingTaskId = await getTaskByIdempotencyKey(task.idempotencyKey, workspaceId);
     if (existingTaskId) {
       const existingTask = taskStore.get(existingTaskId);
       if (existingTask) {
@@ -239,13 +265,17 @@ export async function submitTask(task: Task): Promise<string> {
     ? {
       ...task,
       id: task.id,
+      workspaceId,
       status: 'pending' as TaskStatus,
       updatedAt: new Date(),
       retryCount: task.retryCount ?? 0,
       childTaskIds: task.childTaskIds ?? [],
       dependsOnTaskIds: task.dependsOnTaskIds ?? []
     }
-    : createTask(task.agentId, task.type, task.data, task.priority, task.executionMode);
+    : {
+      ...createTask(task.agentId, task.type, task.data, task.priority, task.executionMode),
+      workspaceId
+    };
 
   if (task.idempotencyKey) {
     newTask.idempotencyKey = task.idempotencyKey;
@@ -288,6 +318,17 @@ export async function submitTask(task: Task): Promise<string> {
 
   emitTaskStatus(newTask);
   incrementMetric('tasksSubmitted');
+  appendAuditEvent({
+    workspaceId,
+    action: 'task.submitted',
+    resourceType: 'task',
+    resourceId: newTask.id,
+    metadata: {
+      taskType: newTask.type,
+      agentId: newTask.agentId,
+      priority: newTask.priority
+    }
+  }).catch(() => undefined);
 
   await getTaskQueue().add(
     newTask.type,
@@ -310,6 +351,10 @@ export async function submitTask(task: Task): Promise<string> {
  */
 export function getTask(taskId: string): Task | undefined {
   return taskStore.get(taskId);
+}
+
+export function isTaskVisibleInWorkspace(task: Task, workspaceId: string | undefined): boolean {
+  return isWorkspaceMatch(task.workspaceId, workspaceId);
 }
 
 /**
@@ -374,6 +419,7 @@ export async function retryTask(taskId: string): Promise<string> {
   }
 
   const newTask = createTask(task.agentId, task.type, task.data, task.priority, task.executionMode);
+  newTask.workspaceId = task.workspaceId;
   newTask.parentTaskId = task.parentTaskId;
   newTask.planId = task.planId;
   newTask.stepId = task.stepId;

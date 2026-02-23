@@ -39,11 +39,11 @@ Phase 5
 - **Status:** complete
 
 ### Phase 5: Priority 3 (Month 3) Build Plan
-- [ ] Implement app-level multi-tenancy (workspaces/tenants in DB, not Supabase orgs)
-- [ ] Add governance workflows and auditability
-- [ ] Add caching strategy and connection pooling policies
-- [ ] Add quota metering and enforcement
-- **Status:** pending
+- [x] Implement app-level multi-tenancy (workspaces/tenants in DB, not Supabase orgs)
+- [x] Add governance workflows and auditability
+- [x] Add caching strategy and connection pooling policies
+- [x] Add quota metering and enforcement
+- **Status:** complete
 
 ### Phase 6: Priority 4+5 (Month 4+) Build Plan
 - [ ] Add IoT/MCP/provider integrations behind feature flags
@@ -99,3 +99,21 @@ Phase 5
   - Real-time socket events for scheduler and webhook delivery observability (`schedule-triggered`, `webhook-delivery`).
   - Dashboard expansion with dedicated Observability, Schedules, and Webhooks tabs plus agent edit support.
   - Operational documentation and SLO baseline at `server/docs/PHASE4_OPERATIONS_SLO_BASELINES.md`.
+- Phase 5 completion artifacts now include:
+  - Request-scoped workspace context via `AsyncLocalStorage` and tenant-aware filtering across agents, tasks, plans, runs, schedules, and webhooks.
+  - Governance workflow APIs and auditability:
+    - `server/src/routes/governanceRoutes.ts`
+    - `server/src/services/auditService.ts`
+    - Audit hooks in governance/schedule/webhook/task flows.
+  - Caching and policy controls:
+    - `server/src/services/cacheService.ts`
+    - `server/src/services/runtimePolicyService.ts`
+    - `GET /api/system/runtime-policies` and readiness cache telemetry.
+  - Quota metering + enforcement:
+    - `server/src/services/quotaService.ts`
+    - Task submission/run-start quota checks and `GET /api/system/quotas`.
+  - Redis/supabase connection policy hardening:
+    - `server/config/redis.ts` policy exports and runtime option support.
+    - `server/src/lib/supabaseClient.ts` timeout-aware fetch wrapper.
+  - Phase 5 schema migration:
+    - `server/src/supabase/migrations/202602230003_phase5_governance_quota.sql`.

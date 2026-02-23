@@ -9,13 +9,17 @@ import {
   SupabaseAgentRepository,
   SupabaseTaskRepository
 } from '../repositories/supabase';
+import { getCurrentWorkspaceIdOrDefault } from './workspaceContextService';
 
 function isFeatureEnabled(): boolean {
   return process.env.FEATURE_SUPABASE_PERSISTENCE === 'true';
 }
 
-function getWorkspaceId(): string {
-  return process.env.DEFAULT_WORKSPACE_ID ?? '';
+function getWorkspaceId(fallback?: string): string {
+  return fallback
+    ?? getCurrentWorkspaceIdOrDefault()
+    ?? process.env.DEFAULT_WORKSPACE_ID
+    ?? '';
 }
 
 function canUseSupabasePersistence(): boolean {
@@ -48,7 +52,7 @@ export async function saveAgentToSupabase(agent: Agent): Promise<void> {
 
   await repository.createAgent({
     id: agent.id,
-    workspaceId: getWorkspaceId(),
+    workspaceId: getWorkspaceId(agent.workspaceId),
     name: agent.name,
     type: agent.type,
     config: agent.config,
@@ -75,6 +79,7 @@ export async function loadAgentsFromSupabase(): Promise<Agent[]> {
 
   return agents.map((agent) => ({
     id: agent.id,
+    workspaceId: agent.workspaceId,
     name: agent.name,
     type: agent.type,
     config: agent.config,
@@ -109,7 +114,7 @@ export async function saveTaskToSupabase(task: Task): Promise<void> {
 
   await repository.createTask({
     id: task.id,
-    workspaceId: getWorkspaceId(),
+    workspaceId: getWorkspaceId(task.workspaceId),
     agentId: task.agentId,
     type: task.type,
     data: task.data,
@@ -150,6 +155,7 @@ export async function loadTasksFromSupabase(): Promise<Task[]> {
 
   return tasks.map((task) => ({
     id: task.id,
+    workspaceId: task.workspaceId,
     agentId: task.agentId,
     type: task.type,
     data: task.data,
@@ -188,7 +194,8 @@ export async function deleteTaskFromSupabase(taskId: string): Promise<void> {
 }
 
 export async function getTaskIdByIdempotencyKeyFromSupabase(
-  idempotencyKey: string
+  idempotencyKey: string,
+  workspaceId?: string
 ): Promise<string | null> {
   if (!canUseSupabasePersistence()) {
     return null;
@@ -199,6 +206,6 @@ export async function getTaskIdByIdempotencyKeyFromSupabase(
     return null;
   }
 
-  const task = await repository.getTaskByIdempotencyKey(getWorkspaceId(), idempotencyKey);
+  const task = await repository.getTaskByIdempotencyKey(getWorkspaceId(workspaceId), idempotencyKey);
   return task?.id ?? null;
 }

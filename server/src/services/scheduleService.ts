@@ -16,6 +16,8 @@ import { Task, TaskExecutionMode } from '../../types';
 import { submitTask } from './taskQueueService';
 import { emitScheduleTriggered } from './socketService';
 import { logger } from '../lib/logger';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
+import { appendAuditEvent } from './auditService';
 
 interface ScheduleTaskPayload extends Record<string, unknown> {
   agentId?: string;
@@ -53,7 +55,7 @@ let scheduleLoop: NodeJS.Timeout | null = null;
 let scheduleProcessing = false;
 
 function getWorkspaceId(): string {
-  return process.env.DEFAULT_WORKSPACE_ID ?? '';
+  return getCurrentWorkspaceIdOrDefault() ?? '';
 }
 
 function getUserId(): string | undefined {
@@ -252,6 +254,7 @@ function createTaskFromSchedule(schedule: ScheduleRecord): Task {
   const now = new Date();
   return {
     id: '',
+    workspaceId: schedule.workspaceId,
     agentId,
     type,
     data: payload.data ?? {},
@@ -426,11 +429,22 @@ export async function createSchedule(input: CreateScheduleInput): Promise<Schedu
 
   schedules.set(created.id, created);
   await attemptPgCronUpsert(created);
+  appendAuditEvent({
+    workspaceId,
+    action: 'schedule.created',
+    resourceType: 'schedule',
+    resourceId: created.id,
+    metadata: {
+      name: created.name,
+      cronExpression: created.cronExpression
+    }
+  }).catch(() => undefined);
   return created;
 }
 
 export function listSchedules(): ScheduleRecord[] {
   return Array.from(schedules.values())
+    .filter((schedule) => isWorkspaceMatch(schedule.workspaceId, getCurrentWorkspaceId()))
     .sort((a, b) => {
       const left = a.nextRunAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
       const right = b.nextRunAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
@@ -439,11 +453,20 @@ export function listSchedules(): ScheduleRecord[] {
 }
 
 export function getSchedule(scheduleId: string): ScheduleRecord | undefined {
-  return schedules.get(scheduleId);
+  const schedule = schedules.get(scheduleId);
+  if (!schedule) {
+    return undefined;
+  }
+
+  if (!isWorkspaceMatch(schedule.workspaceId, getCurrentWorkspaceId())) {
+    return undefined;
+  }
+
+  return schedule;
 }
 
 export async function updateSchedule(scheduleId: string, updates: UpdateScheduleInput): Promise<ScheduleRecord | null> {
-  const existing = schedules.get(scheduleId);
+  const existing = getSchedule(scheduleId);
   if (!existing) {
     return null;
   }
@@ -493,10 +516,21 @@ export async function updateSchedule(scheduleId: string, updates: UpdateSchedule
 
   schedules.set(updated.id, updated);
   await attemptPgCronUpsert(updated);
+  appendAuditEvent({
+    workspaceId: updated.workspaceId,
+    action: 'schedule.updated',
+    resourceType: 'schedule',
+    resourceId: updated.id
+  }).catch(() => undefined);
   return updated;
 }
 
 export async function deleteSchedule(scheduleId: string): Promise<boolean> {
+  const existing = getSchedule(scheduleId);
+  if (!existing) {
+    return false;
+  }
+
   const deleted = await persistScheduleDelete(scheduleId);
   if (!deleted) {
     return false;
@@ -504,16 +538,28 @@ export async function deleteSchedule(scheduleId: string): Promise<boolean> {
 
   schedules.delete(scheduleId);
   await attemptPgCronDelete(scheduleId);
+  appendAuditEvent({
+    workspaceId: existing.workspaceId,
+    action: 'schedule.deleted',
+    resourceType: 'schedule',
+    resourceId: existing.id
+  }).catch(() => undefined);
   return true;
 }
 
 export async function triggerScheduleNow(scheduleId: string): Promise<{ taskQueued: boolean }> {
-  const schedule = schedules.get(scheduleId);
+  const schedule = getSchedule(scheduleId);
   if (!schedule) {
     throw new Error('Schedule not found');
   }
 
   await triggerSchedule(schedule);
+  appendAuditEvent({
+    workspaceId: schedule.workspaceId,
+    action: 'schedule.triggered',
+    resourceType: 'schedule',
+    resourceId: schedule.id
+  }).catch(() => undefined);
   return { taskQueued: true };
 }
 

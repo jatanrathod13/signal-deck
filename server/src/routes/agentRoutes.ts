@@ -7,6 +7,8 @@ import { Router, Request, Response } from 'express';
 import { agentService } from '../services/agentService';
 import { streamAgentTask } from '../services/executionService';
 import { Task } from '../../types';
+import { buildCacheKey, getCachedValue, invalidateCachePrefix, setCachedValue } from '../services/cacheService';
+import { getCurrentWorkspaceId } from '../services/workspaceContextService';
 
 const router = Router();
 
@@ -37,6 +39,8 @@ router.post('/', (req: Request<{}, {}, CreateAgentBody>, res: Response) => {
     }
 
     const agent = agentService.deployAgent(name, type, config);
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    invalidateCachePrefix(buildCacheKey(['agents:list', workspaceId]));
 
     return res.status(201).json({
       success: true,
@@ -51,9 +55,20 @@ router.post('/', (req: Request<{}, {}, CreateAgentBody>, res: Response) => {
 });
 
 // GET /api/agents - List all agents
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', (req: Request, res: Response) => {
   try {
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    const cacheKey = buildCacheKey(['agents:list', workspaceId]);
+    const cached = getCachedValue<ReturnType<typeof agentService.listAgents>>(cacheKey);
+    if (cached) {
+      return res.status(200).json({
+        success: true,
+        data: cached
+      });
+    }
+
     const agents = agentService.listAgents();
+    setCachedValue(cacheKey, agents);
 
     return res.status(200).json({
       success: true,
@@ -139,6 +154,8 @@ router.patch('/:id', (req: Request<{ id: string }, {}, UpdateAgentBody>, res: Re
     }
 
     const agent = agentService.updateAgent(id, updates);
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    invalidateCachePrefix(buildCacheKey(['agents:list', workspaceId]));
 
     return res.status(200).json({
       success: true,
@@ -163,6 +180,8 @@ router.post('/:id/start', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
     const agent = agentService.startAgent(id);
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    invalidateCachePrefix(buildCacheKey(['agents:list', workspaceId]));
 
     return res.status(200).json({
       success: true,
@@ -187,6 +206,8 @@ router.post('/:id/stop', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
     const agent = agentService.stopAgent(id);
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    invalidateCachePrefix(buildCacheKey(['agents:list', workspaceId]));
 
     return res.status(200).json({
       success: true,
@@ -211,6 +232,8 @@ router.post('/:id/restart', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
     const agent = agentService.restartAgent(id);
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    invalidateCachePrefix(buildCacheKey(['agents:list', workspaceId]));
 
     return res.status(200).json({
       success: true,
@@ -242,6 +265,9 @@ router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
         error: 'Agent not found'
       });
     }
+
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    invalidateCachePrefix(buildCacheKey(['agents:list', workspaceId]));
 
     return res.status(204).send();
   } catch (error) {

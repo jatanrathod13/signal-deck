@@ -13,6 +13,7 @@ import {
   triggerScheduleNow,
   updateSchedule
 } from '../services/scheduleService';
+import { QuotaExceededError } from '../services/quotaService';
 
 const router = Router();
 
@@ -64,6 +65,19 @@ router.post('/', async (req: Request, res: Response) => {
       data: schedule
     });
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
     return res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create schedule'
@@ -132,6 +146,19 @@ router.post('/:id/trigger', async (req: Request<{ id: string }>, res: Response) 
       data: result
     });
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
     if (error instanceof Error && error.message === 'Schedule not found') {
       return res.status(404).json({
         success: false,

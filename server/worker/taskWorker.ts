@@ -5,6 +5,7 @@
 
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
+import { getRedisConnectionPolicy } from '../config/redis';
 import { OrchestrationExecutionStrategy, RunArtifacts, Task, TaskErrorType, TaskExecutionMode, TaskStatus } from '../types';
 import { enqueueTaskById, getAllTasks, getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
@@ -62,10 +63,14 @@ function isOrchestrationTask(taskType: string): boolean {
  */
 function getRedisConnection(): Redis {
   if (!redisConnection) {
+    const policy = getRedisConnectionPolicy();
     redisConnection = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      host: policy.host,
+      port: policy.port,
+      password: policy.password,
       maxRetriesPerRequest: null,
+      enableOfflineQueue: policy.enableOfflineQueue,
+      connectTimeout: policy.connectTimeoutMs,
       lazyConnect: true
     });
   }
@@ -399,7 +404,8 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
     runId: task.runId,
     metadata: {
       ...(metadata ?? {}),
-      parentTaskId: task.id
+      parentTaskId: task.id,
+      workspaceId: task.workspaceId
     }
   });
 

@@ -7,6 +7,34 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let adminClient: SupabaseClient | null = null;
 
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+async function fetchWithTimeout(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  const timeoutMs = parsePositiveInt(process.env.SUPABASE_READ_TIMEOUT_MS, 10000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: init?.signal ?? controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function getSupabaseUrl(): string {
   return process.env.SUPABASE_URL ?? '';
 }
@@ -31,6 +59,9 @@ export function getSupabaseAdminClient(): SupabaseClient | null {
       auth: {
         persistSession: false,
         autoRefreshToken: false
+      },
+      global: {
+        fetch: fetchWithTimeout
       }
     });
   }

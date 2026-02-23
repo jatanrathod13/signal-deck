@@ -10,6 +10,8 @@ import {
 } from '../../types';
 import { redis } from '../../config/redis';
 import { appendRunEvent, getRun } from './conversationService';
+import { appendAuditEvent } from './auditService';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
 
 // In-memory approval store (keyed by approval ID)
 const approvals = new Map<string, ApprovalRequest>();
@@ -146,6 +148,7 @@ export async function requestApproval(
 
   const approval: ApprovalRequest = {
     id: approvalId,
+    workspaceId: getCurrentWorkspaceIdOrDefault() ?? 'workspace-default',
     runId: context.runId,
     toolName,
     reason: context.reason || `Tool ${toolName} requires approval`,
@@ -156,6 +159,17 @@ export async function requestApproval(
 
   approvals.set(approvalId, approval);
   persistApprovalAsync(approval);
+  appendAuditEvent({
+    workspaceId: approval.workspaceId,
+    action: 'governance.approval.requested',
+    resourceType: 'approval',
+    resourceId: approvalId,
+    metadata: {
+      runId: context.runId,
+      toolName,
+      reason: approval.reason
+    }
+  }).catch(() => undefined);
 
   // Emit approval request event
   appendRunEvent({
@@ -191,6 +205,16 @@ export async function requestApproval(
             toolName
           }
         });
+        appendAuditEvent({
+          workspaceId: pending.workspaceId,
+          action: 'governance.approval.timed_out',
+          resourceType: 'approval',
+          resourceId: approvalId,
+          metadata: {
+            runId: pending.runId,
+            toolName: pending.toolName
+          }
+        }).catch(() => undefined);
 
         resolve({ approved: false, approvalId });
       }
@@ -237,6 +261,18 @@ export function resolveApproval(
     });
   }
 
+  appendAuditEvent({
+    workspaceId: approval.workspaceId,
+    action: 'governance.approval.resolved',
+    resourceType: 'approval',
+    resourceId: approval.id,
+    metadata: {
+      runId: approval.runId,
+      status: decision,
+      resolvedBy
+    }
+  }).catch(() => undefined);
+
   // Notify the waiting callback
   const callback = pendingApprovalCallbacks.get(approvalId);
   if (callback) {
@@ -251,7 +287,16 @@ export function resolveApproval(
  * Get an approval by ID.
  */
 export function getApproval(approvalId: string): ApprovalRequest | undefined {
-  return approvals.get(approvalId);
+  const approval = approvals.get(approvalId);
+  if (!approval) {
+    return undefined;
+  }
+
+  if (!isWorkspaceMatch(approval.workspaceId, getCurrentWorkspaceId())) {
+    return undefined;
+  }
+
+  return approval;
 }
 
 /**
@@ -260,6 +305,7 @@ export function getApproval(approvalId: string): ApprovalRequest | undefined {
 export function listRunApprovals(runId: string): ApprovalRequest[] {
   return Array.from(approvals.values())
     .filter((a) => a.runId === runId)
+    .filter((a) => isWorkspaceMatch(a.workspaceId, getCurrentWorkspaceId()))
     .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime());
 }
 
@@ -268,4 +314,12 @@ export function listRunApprovals(runId: string): ApprovalRequest[] {
  */
 export function listPendingApprovals(runId: string): ApprovalRequest[] {
   return listRunApprovals(runId).filter((a) => a.status === 'pending');
+}
+
+export function listApprovals(filters?: { status?: ApprovalStatus; runId?: string }): ApprovalRequest[] {
+  return Array.from(approvals.values())
+    .filter((approval) => isWorkspaceMatch(approval.workspaceId, getCurrentWorkspaceId()))
+    .filter((approval) => !filters?.status || approval.status === filters.status)
+    .filter((approval) => !filters?.runId || approval.runId === filters.runId)
+    .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime());
 }

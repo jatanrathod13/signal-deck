@@ -11,9 +11,13 @@ import {
   retryTask,
   getAllTasks,
   getChildTasks,
-  getTasksByPlan
+  getTasksByPlan,
+  isTaskVisibleInWorkspace
 } from '../services/taskQueueService';
 import { Task, TaskExecutionMode, TaskStatus } from '../../types';
+import { buildCacheKey, getCachedValue, invalidateCachePrefix, setCachedValue } from '../services/cacheService';
+import { getCurrentWorkspaceId } from '../services/workspaceContextService';
+import { QuotaExceededError } from '../services/quotaService';
 
 const router = Router();
 
@@ -64,8 +68,10 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
     }
 
     const now = new Date();
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
     const task: Task = {
       id: '',
+      workspaceId,
       agentId,
       type,
       data,
@@ -88,12 +94,26 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
 
     const taskId = await submitTask(task);
     const createdTask = getTask(taskId);
+    invalidateCachePrefix(buildCacheKey(['tasks:list', workspaceId]));
 
     return res.status(201).json({
       success: true,
       data: createdTask
     });
   } catch (error) {
+    if (error instanceof QuotaExceededError) {
+      return res.status(429).json({
+        success: false,
+        error: error.message,
+        details: {
+          metric: error.metric,
+          limit: error.limit,
+          current: error.current,
+          workspaceId: error.workspaceId
+        }
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create task'
@@ -104,15 +124,29 @@ router.post('/', async (req: Request<{}, {}, CreateTaskBody>, res: Response) => 
 router.get('/', (req: Request<{}, {}, {}, TaskQuery>, res: Response) => {
   try {
     const { status, planId } = req.query;
-    let tasks = getAllTasks();
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+    const cacheKey = buildCacheKey(['tasks:list', workspaceId, status, planId]);
+    const cached = getCachedValue<Task[]>(cacheKey);
+    if (cached) {
+      return res.status(200).json({
+        success: true,
+        data: cached
+      });
+    }
+
+    let tasks = getAllTasks().filter((task) => isTaskVisibleInWorkspace(task, workspaceId));
 
     if (status) {
       tasks = tasks.filter((task) => task.status === status);
     }
 
     if (planId) {
-      tasks = getTasksByPlan(planId).filter((task) => !status || task.status === status);
+      tasks = getTasksByPlan(planId)
+        .filter((task) => isTaskVisibleInWorkspace(task, workspaceId))
+        .filter((task) => !status || task.status === status);
     }
+
+    setCachedValue(cacheKey, tasks);
 
     return res.status(200).json({
       success: true,
@@ -129,9 +163,10 @@ router.get('/', (req: Request<{}, {}, {}, TaskQuery>, res: Response) => {
 router.get('/:id', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
     const task = getTask(id);
 
-    if (!task) {
+    if (!task || !isTaskVisibleInWorkspace(task, workspaceId)) {
       return res.status(404).json({
         success: false,
         error: 'Task not found'
@@ -151,18 +186,20 @@ router.get('/:id', (req: Request<{ id: string }>, res: Response) => {
 });
 
 router.get('/:id/children', (req: Request<{ id: string }>, res: Response) => {
+  const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
   return res.status(200).json({
     success: true,
-    data: getChildTasks(req.params.id)
+    data: getChildTasks(req.params.id).filter((task) => isTaskVisibleInWorkspace(task, workspaceId))
   });
 });
 
 router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
     const task = getTask(id);
 
-    if (!task) {
+    if (!task || !isTaskVisibleInWorkspace(task, workspaceId)) {
       return res.status(404).json({
         success: false,
         error: 'Task not found'
@@ -185,6 +222,8 @@ router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
       });
     }
 
+    invalidateCachePrefix(buildCacheKey(['tasks:list', workspaceId]));
+
     return res.status(200).json({
       success: true,
       data: getTask(id)
@@ -200,9 +239,10 @@ router.delete('/:id', (req: Request<{ id: string }>, res: Response) => {
 router.post('/:id/retry', async (req: Request<{ id: string }>, res: Response) => {
   try {
     const { id } = req.params;
+    const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
     const task = getTask(id);
 
-    if (!task) {
+    if (!task || !isTaskVisibleInWorkspace(task, workspaceId)) {
       return res.status(404).json({
         success: false,
         error: 'Task not found'
@@ -217,6 +257,7 @@ router.post('/:id/retry', async (req: Request<{ id: string }>, res: Response) =>
     }
 
     const newTaskId = await retryTask(id);
+    invalidateCachePrefix(buildCacheKey(['tasks:list', workspaceId]));
 
     return res.status(200).json({
       success: true,

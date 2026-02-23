@@ -173,5 +173,34 @@
     - `/Users/jatanrathod/Applications/context-engineering-kit-test/server/docs/ENVIRONMENT_CONTRACT.md`
 - Verification:
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (20 suites, 123 tests).
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` passed.
+
+## Phase 5 Completion Update (2026-02-23)
+- App-level multi-tenancy:
+  - Added request-scoped workspace context service (`/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/workspaceContextService.ts`) and wired it through request/auth middleware.
+  - Tenant-aware filtering/enforcement now applies in core runtime stores: agents/tasks/plans/conversations/runs/schedules/webhooks.
+  - Core entities now carry `workspaceId` in runtime types where needed (`server/types/index.ts`).
+- Governance workflows + auditability:
+  - Added governance workflow API surface at `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/routes/governanceRoutes.ts`.
+  - Added durable audit logging service with Supabase insert + in-memory fallback at `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/auditService.ts`.
+  - Approval lifecycle now writes audit events (`governance.approval.requested`, `.resolved`, `.timed_out`) and workspace scoping is enforced.
+- Caching + connection pooling policies:
+  - Added bounded TTL cache with metrics and invalidation (`/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/cacheService.ts`).
+  - Added runtime policy snapshot service (`/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/runtimePolicyService.ts`) and `/api/system/runtime-policies` endpoint.
+  - Redis connection policy moved into typed config (`/Users/jatanrathod/Applications/context-engineering-kit-test/server/config/redis.ts`) and reused by queue/worker clients.
+  - Supabase admin client now uses timeout-aware fetch policy (`server/src/lib/supabaseClient.ts`).
+- Quota metering + enforcement:
+  - Added quota service (`/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/services/quotaService.ts`) with workspace-scoped task/hour and run/day windows.
+  - Enforced quotas in task submission and conversation run start paths with 429 responses.
+  - Added `/api/system/quotas` endpoint for current workspace usage reporting.
+- Schema:
+  - Added Phase 5 migration `/Users/jatanrathod/Applications/context-engineering-kit-test/server/src/supabase/migrations/202602230003_phase5_governance_quota.sql` with:
+    - `workspace_governance_workflows`
+    - `workspace_quota_policies`
+    - `workspace_quota_usage`
+    - indexes, triggers, and RLS policies.
+- Verification:
+  - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm run build` passed.
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/server && npm test` passed (19 suites, 120 tests).
   - `cd /Users/jatanrathod/Applications/context-engineering-kit-test/client && npm run build` passed.

@@ -8,6 +8,7 @@ import jwt, { JwtPayload } from 'jsonwebtoken';
 import { createPublicKey } from 'crypto';
 import { getWorkspaceMembership } from '../services/workspaceAccessService';
 import { WorkspaceRole } from '../repositories';
+import { runWithRequestContext } from '../services/workspaceContextService';
 
 const WORKSPACE_HEADER = 'x-workspace-id';
 
@@ -238,7 +239,15 @@ export async function supabaseAuthMiddleware(req: Request, res: Response, next: 
       role: roleFromToken ?? 'admin',
       tokenClaims: payload
     };
-    next();
+    runWithRequestContext({
+      requestId: req.requestId,
+      userId,
+      workspaceId,
+      ipAddress: req.ip,
+      userAgent: req.header('user-agent') ?? undefined
+    }, () => {
+      next();
+    });
     return;
   }
 
@@ -268,5 +277,13 @@ export async function supabaseAuthMiddleware(req: Request, res: Response, next: 
     tokenClaims: payload
   };
 
-  next();
+  runWithRequestContext({
+    requestId: req.requestId,
+    userId,
+    workspaceId,
+    ipAddress: req.ip,
+    userAgent: req.header('user-agent') ?? undefined
+  }, () => {
+    next();
+  });
 }
