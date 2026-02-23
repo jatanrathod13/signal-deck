@@ -8,6 +8,15 @@ import { EventEmitter } from 'events';
 import { Agent, AgentStatus } from '../../types';
 import { emitAgentStatus } from './socketService';
 import { redis } from '../../config/redis';
+import {
+  deleteAgentFromSupabase,
+  isSupabasePersistenceEnabled,
+  loadAgentsFromSupabase,
+  saveAgentToSupabase
+} from './supabasePersistenceService';
+import { appendAuditEvent } from './auditService';
+import { invalidateCachePrefix } from './cacheService';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
 
 // Redis key prefix for agents
 const AGENT_KEY_PREFIX = 'agent:';
@@ -22,8 +31,26 @@ let agents: AgentRegistry = new Map();
 // Redis connection status
 let redisAvailable = false;
 
+function resolveAgentWorkspaceId(agent: Agent): string {
+  return agent.workspaceId ?? 'workspace-default';
+}
+
+function isVisibleInActiveWorkspace(agent: Agent): boolean {
+  return isWorkspaceMatch(resolveAgentWorkspaceId(agent), getCurrentWorkspaceId());
+}
+
 // Initialize Redis connection and load agents
 async function initializeRedis(): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      const persistedAgents = await loadAgentsFromSupabase();
+      agents = new Map(persistedAgents.map((agent) => [agent.id, agent]));
+      console.log(`Loaded ${agents.size} agents from Supabase`);
+    } catch (error) {
+      console.warn('Supabase agent persistence unavailable, falling back to Redis:', error);
+    }
+  }
+
   try {
     // Test Redis connection
     await redis.ping();
@@ -31,7 +58,9 @@ async function initializeRedis(): Promise<void> {
     console.log('Redis connected for agent persistence');
 
     // Load existing agents from Redis on startup
-    await loadAgentsFromRedis();
+    if (!isSupabasePersistenceEnabled() || agents.size === 0) {
+      await loadAgentsFromRedis();
+    }
   } catch (error) {
     console.warn('Redis unavailable, using in-memory storage only:', error);
     redisAvailable = false;
@@ -60,6 +89,9 @@ async function loadAgentsFromRedis(): Promise<void> {
               // Convert date strings back to Date objects
               agentData.createdAt = new Date(agentData.createdAt);
               agentData.updatedAt = new Date(agentData.updatedAt);
+              if (!agentData.workspaceId) {
+                agentData.workspaceId = getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
+              }
               agents.set(agentData.id, agentData);
             } catch (parseError) {
               console.error('Failed to parse agent data:', parseError);
@@ -116,6 +148,32 @@ async function deleteAgentFromRedis(agentId: string): Promise<void> {
   }
 }
 
+async function persistAgent(agent: Agent): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      await saveAgentToSupabase(agent);
+      return;
+    } catch (error) {
+      console.error('Failed to save agent to Supabase, falling back to Redis:', error);
+    }
+  }
+
+  await saveAgentToRedis(agent);
+}
+
+async function removePersistedAgent(agentId: string): Promise<void> {
+  if (isSupabasePersistenceEnabled()) {
+    try {
+      await deleteAgentFromSupabase(agentId);
+      return;
+    } catch (error) {
+      console.error('Failed to delete agent from Supabase, falling back to Redis:', error);
+    }
+  }
+
+  await deleteAgentFromRedis(agentId);
+}
+
 // Create EventEmitter for lifecycle events
 class AgentService extends EventEmitter {
   // Uses module-level agents Map for backward compatibility
@@ -130,9 +188,11 @@ class AgentService extends EventEmitter {
   deployAgent(name: string, type: string, config: Record<string, unknown>): Agent {
     const id = this.generateId();
     const now = new Date();
+    const workspaceId = getCurrentWorkspaceIdOrDefault() ?? 'workspace-default';
 
     const agent: Agent = {
       id,
+      workspaceId,
       name,
       type,
       config,
@@ -144,12 +204,23 @@ class AgentService extends EventEmitter {
     agents.set(id, agent);
 
     // Persist to Redis asynchronously
-    saveAgentToRedis(agent).catch(err => {
-      console.error('Failed to persist agent to Redis:', err);
+    persistAgent(agent).catch(err => {
+      console.error('Failed to persist agent:', err);
     });
 
     this.emit('agent:registered', { agentId: id, agent });
     emitAgentStatus(agent);
+    invalidateCachePrefix('agents:list:');
+    appendAuditEvent({
+      workspaceId,
+      action: 'agent.created',
+      resourceType: 'agent',
+      resourceId: id,
+      metadata: {
+        name: agent.name,
+        type: agent.type
+      }
+    }).catch(() => undefined);
 
     return agent;
   }
@@ -169,8 +240,8 @@ class AgentService extends EventEmitter {
     agent.updatedAt = new Date();
 
     // Persist to Redis asynchronously
-    updateAgentInRedis(agent).catch(err => {
-      console.error('Failed to update agent in Redis:', err);
+    persistAgent(agent).catch(err => {
+      console.error('Failed to update agent persistence:', err);
     });
 
     this.emit('agent:started', { agentId: id, agent });
@@ -194,8 +265,8 @@ class AgentService extends EventEmitter {
     agent.updatedAt = new Date();
 
     // Persist to Redis asynchronously
-    updateAgentInRedis(agent).catch(err => {
-      console.error('Failed to update agent in Redis:', err);
+    persistAgent(agent).catch(err => {
+      console.error('Failed to update agent persistence:', err);
     });
 
     this.emit('agent:stopped', { agentId: id, agent });
@@ -228,7 +299,16 @@ class AgentService extends EventEmitter {
    * @returns Agent object or undefined
    */
   getAgent(id: string): Agent | undefined {
-    return agents.get(id);
+    const agent = agents.get(id);
+    if (!agent) {
+      return undefined;
+    }
+
+    if (!isVisibleInActiveWorkspace(agent)) {
+      return undefined;
+    }
+
+    return agent;
   }
 
   /**
@@ -236,7 +316,8 @@ class AgentService extends EventEmitter {
    * @returns Array of all agents
    */
   listAgents(): Agent[] {
-    return Array.from(agents.values());
+    return Array.from(agents.values())
+      .filter((agent) => isVisibleInActiveWorkspace(agent));
   }
 
   /**
@@ -253,13 +334,65 @@ class AgentService extends EventEmitter {
     agents.delete(id);
 
     // Remove from Redis asynchronously
-    deleteAgentFromRedis(id).catch(err => {
-      console.error('Failed to delete agent from Redis:', err);
+    removePersistedAgent(id).catch(err => {
+      console.error('Failed to delete agent persistence:', err);
     });
 
     this.emit('agent:deleted', { agentId: id });
+    invalidateCachePrefix('agents:list:');
+    appendAuditEvent({
+      workspaceId: resolveAgentWorkspaceId(agent),
+      action: 'agent.deleted',
+      resourceType: 'agent',
+      resourceId: agent.id
+    }).catch(() => undefined);
 
     return true;
+  }
+
+  /**
+   * Update mutable agent properties.
+   */
+  updateAgent(
+    id: string,
+    updates: {
+      name?: string;
+      type?: string;
+      config?: Record<string, unknown>;
+    }
+  ): Agent {
+    const agent = agents.get(id);
+    if (!agent) {
+      throw new Error('Agent not found');
+    }
+
+    if (updates.name !== undefined) {
+      agent.name = updates.name;
+    }
+    if (updates.type !== undefined) {
+      agent.type = updates.type;
+    }
+    if (updates.config !== undefined) {
+      agent.config = updates.config;
+    }
+
+    agent.updatedAt = new Date();
+
+    persistAgent(agent).catch((err) => {
+      console.error('Failed to update agent persistence:', err);
+    });
+
+    this.emit('agent:updated', { agentId: id, agent });
+    emitAgentStatus(agent);
+    invalidateCachePrefix('agents:list:');
+    appendAuditEvent({
+      workspaceId: resolveAgentWorkspaceId(agent),
+      action: 'agent.updated',
+      resourceType: 'agent',
+      resourceId: agent.id
+    }).catch(() => undefined);
+
+    return agent;
   }
 
   /**
@@ -294,6 +427,15 @@ export const listAgents = (): Agent[] =>
 
 export const deleteAgent = (id: string): boolean =>
   agentService.deleteAgent(id);
+
+export const updateAgent = (
+  id: string,
+  updates: {
+    name?: string;
+    type?: string;
+    config?: Record<string, unknown>;
+  }
+): Agent => agentService.updateAgent(id, updates);
 
 // Export initialization function for startup loading
 export const initializeAgentPersistence = initializeRedis;

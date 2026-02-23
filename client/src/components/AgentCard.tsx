@@ -3,8 +3,8 @@
  * Individual agent display with status and controls
  */
 import { useState } from 'react';
-import { Play, RotateCcw, Square, Trash2 } from 'lucide-react';
-import { useDeleteAgent, useStartAgent, useStopAgent } from '../hooks/useAgents';
+import { PenLine, Play, RotateCcw, Square, Trash2 } from 'lucide-react';
+import { useDeleteAgent, useStartAgent, useStopAgent, useUpdateAgent } from '../hooks/useAgents';
 import type { Agent, AgentStatus } from '../types';
 import { cn } from '../lib/utils';
 
@@ -54,9 +54,15 @@ export function AgentCard({ agent, className }: AgentCardProps) {
   const [isStopping, setIsStopping] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(agent.name);
+  const [editType, setEditType] = useState(agent.type);
+  const [editConfig, setEditConfig] = useState(JSON.stringify(agent.config ?? {}, null, 2));
+  const [editError, setEditError] = useState<string | null>(null);
 
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
+  const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
 
   const handleStart = async () => {
@@ -108,9 +114,59 @@ export function AgentCard({ agent, className }: AgentCardProps) {
     }
   };
 
+  const beginEdit = () => {
+    setEditName(agent.name);
+    setEditType(agent.type);
+    setEditConfig(JSON.stringify(agent.config ?? {}, null, 2));
+    setEditError(null);
+    setIsEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditError(null);
+  };
+
+  const saveEdit = async () => {
+    let parsedConfig: Record<string, unknown>;
+
+    try {
+      const parsed = JSON.parse(editConfig);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setEditError('Config must be a JSON object.');
+        return;
+      }
+      parsedConfig = parsed as Record<string, unknown>;
+    } catch {
+      setEditError('Config JSON is invalid.');
+      return;
+    }
+
+    if (!editName.trim() || !editType.trim()) {
+      setEditError('Name and type are required.');
+      return;
+    }
+
+    setEditError(null);
+
+    try {
+      await updateAgent.mutateAsync({
+        id: agent.id,
+        data: {
+          name: editName.trim(),
+          type: editType.trim(),
+          config: parsedConfig
+        }
+      });
+      setIsEditing(false);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Failed to update agent');
+    }
+  };
+
   const isRunning = agent.status === 'running' || agent.status === 'idle';
   const isStopped = agent.status === 'stopped';
-  const isLoading = isStarting || isStopping || isRestarting || isDeleting;
+  const isLoading = isStarting || isStopping || isRestarting || isDeleting || updateAgent.isPending;
 
   return (
     <article className={cn('glass-panel surface-lift p-4 subtle-ring transition-all duration-200', className)}>
@@ -145,7 +201,7 @@ export function AgentCard({ agent, className }: AgentCardProps) {
         <p className="truncate">id: {agent.id}</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 border-t border-white/10 pt-3">
+      <div className="grid grid-cols-5 gap-2 border-t border-white/10 pt-3">
         <button
           onClick={handleStart}
           disabled={isRunning || isLoading}
@@ -193,6 +249,22 @@ export function AgentCard({ agent, className }: AgentCardProps) {
         </button>
 
         <button
+          onClick={beginEdit}
+          disabled={isLoading}
+          className={cn(
+            'rounded-lg px-2 py-1.5 text-xs font-semibold transition-all',
+            isLoading
+              ? 'cursor-not-allowed bg-slate-700/30 text-slate-500'
+              : 'border border-blue-300/30 bg-blue-300/15 text-blue-100 hover:bg-blue-300/25'
+          )}
+        >
+          <span className="inline-flex items-center gap-1">
+            <PenLine className="h-3 w-3" />
+            Edit
+          </span>
+        </button>
+
+        <button
           onClick={handleDelete}
           disabled={isLoading}
           className={cn(
@@ -208,6 +280,47 @@ export function AgentCard({ agent, className }: AgentCardProps) {
           </span>
         </button>
       </div>
+
+      {isEditing && (
+        <div className="mt-3 space-y-2 rounded-xl border border-white/10 bg-slate-900/45 p-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <input
+              value={editName}
+              onChange={(event) => setEditName(event.target.value)}
+              className="input-field"
+              placeholder="Agent name"
+            />
+            <input
+              value={editType}
+              onChange={(event) => setEditType(event.target.value)}
+              className="input-field"
+              placeholder="Agent type"
+            />
+          </div>
+          <textarea
+            value={editConfig}
+            onChange={(event) => setEditConfig(event.target.value)}
+            rows={5}
+            className="input-field font-mono text-xs"
+          />
+          {editError && (
+            <p className="text-xs text-rose-200">{editError}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-primary rounded-lg px-3 py-1.5 text-xs font-semibold"
+              onClick={saveEdit}
+              disabled={updateAgent.isPending}
+            >
+              {updateAgent.isPending ? 'Saving...' : 'Save'}
+            </button>
+            <button type="button" className="btn-ghost rounded-lg px-3 py-1.5 text-xs font-semibold" onClick={cancelEdit}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

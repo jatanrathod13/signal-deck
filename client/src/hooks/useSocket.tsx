@@ -17,9 +17,12 @@ import type {
   Agent,
   Task,
   RunEvent,
-  RunEventType
+  RunEventType,
+  ScheduleTriggeredEvent,
+  WebhookDeliveryEvent
 } from '../types';
 import { useConversationStore } from '../stores/conversationStore';
+import { useOperationsStore } from '../stores/operationsStore';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || '';
 
@@ -50,6 +53,8 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const appendRunEvent = useConversationStore((state) => state.appendRunEvent);
   const addMessage = useConversationStore((state) => state.addMessage);
   const upsertRun = useConversationStore((state) => state.upsertRun);
+  const addScheduleEvent = useOperationsStore((state) => state.addScheduleEvent);
+  const addWebhookEvent = useOperationsStore((state) => state.addWebhookEvent);
 
   useEffect(() => {
     socketRef.current = io(SOCKET_URL, {
@@ -225,13 +230,32 @@ export function SocketProvider({ children }: SocketProviderProps) {
       console.error('[Socket] Error event:', data.message);
     });
 
+    socket.on('schedule-triggered', (event: ScheduleTriggeredEvent) => {
+      addScheduleEvent(event);
+    });
+
+    socket.on('webhook-delivery', (event: WebhookDeliveryEvent) => {
+      addWebhookEvent(event);
+    });
+
     return () => {
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
       setIsConnected(false);
     };
-  }, [updateAgent, addAgent, updateTask, appendTaskLog, addTask, appendRunEvent, addMessage, upsertRun]);
+  }, [
+    updateAgent,
+    addAgent,
+    updateTask,
+    appendTaskLog,
+    addTask,
+    appendRunEvent,
+    addMessage,
+    upsertRun,
+    addScheduleEvent,
+    addWebhookEvent
+  ]);
 
   const value = useMemo(() => ({ socket: socketRef.current, isConnected }), [isConnected]);
 

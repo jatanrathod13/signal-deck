@@ -5,11 +5,45 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { getRun, listRunEvents } from '../services/conversationService';
+import { getRun, listRunEvents, listRuns } from '../services/conversationService';
 import { buildRunIntelligence } from '../services/runIntelligenceService';
 import { listRunApprovals, resolveApproval, getApproval } from '../services/governanceService';
+import { buildCacheKey, getCachedValue, setCachedValue } from '../services/cacheService';
+import { getCurrentWorkspaceId } from '../services/workspaceContextService';
 
 const router = Router();
+
+/**
+ * GET /api/runs - List recent runs for dashboard observability
+ */
+router.get('/', (req: Request<{}, {}, {}, { status?: string; limit?: string }>, res: Response) => {
+  const limitRaw = Number.parseInt(req.query.limit ?? '100', 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0
+    ? Math.min(limitRaw, 500)
+    : 100;
+
+  const status = req.query.status;
+  const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+  const cacheKey = buildCacheKey(['runs:list', workspaceId, status, limit]);
+  const cached = getCachedValue<ReturnType<typeof listRuns>>(cacheKey);
+  if (cached) {
+    return res.status(200).json({
+      success: true,
+      data: cached
+    });
+  }
+
+  const runs = listRuns()
+    .filter((run) => !status || run.status === status)
+    .slice(0, limit);
+
+  setCachedValue(cacheKey, runs, 3000);
+
+  return res.status(200).json({
+    success: true,
+    data: runs
+  });
+});
 
 /**
  * GET /api/runs/:runId - Get run status and events
@@ -44,7 +78,15 @@ router.get('/:runId/intelligence', (req: Request<{ runId: string }>, res: Respon
     });
   }
 
-  const intelligence = buildRunIntelligence(req.params.runId);
+  const workspaceId = req.auth?.workspaceId ?? getCurrentWorkspaceId();
+  const cacheKey = buildCacheKey(['runs:intelligence', workspaceId, req.params.runId]);
+  let intelligence = getCachedValue<NonNullable<ReturnType<typeof buildRunIntelligence>>>(cacheKey);
+  if (!intelligence) {
+    intelligence = buildRunIntelligence(req.params.runId);
+    if (intelligence) {
+      setCachedValue(cacheKey, intelligence, 2000);
+    }
+  }
   if (!intelligence) {
     return res.status(404).json({
       success: false,

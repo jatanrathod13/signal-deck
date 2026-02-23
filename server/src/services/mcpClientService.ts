@@ -10,6 +10,7 @@ import type { Tool } from 'ai';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { executeWithCircuitBreaker } from './circuitBreakerService';
 
 /**
  * MCP Server Configuration
@@ -49,6 +50,7 @@ class McpClientWrapper {
   private command?: string;
   private args?: string[];
   private connected = false;
+  private serverKey: string;
 
   constructor(
     serverUrl: string,
@@ -60,6 +62,7 @@ class McpClientWrapper {
     this.transport = transport;
     this.command = command;
     this.args = args;
+    this.serverKey = serverUrl.replace(/[^a-zA-Z0-9:_-]/g, '_');
   }
 
   /**
@@ -90,13 +93,21 @@ class McpClientWrapper {
             )
           )
         });
-        await this.client.connect(stdioTransport);
+        await executeWithCircuitBreaker(
+          `mcp:${this.serverKey}:connect`,
+          async () => this.client!.connect(stdioTransport),
+          { timeoutMs: 15_000 }
+        );
         this.activeTransport = stdioTransport;
       } else {
         const httpTransport = new StreamableHTTPClientTransport(
           new URL(this.serverUrl)
         );
-        await this.client.connect(httpTransport);
+        await executeWithCircuitBreaker(
+          `mcp:${this.serverKey}:connect`,
+          async () => this.client!.connect(httpTransport),
+          { timeoutMs: 15_000 }
+        );
         this.activeTransport = httpTransport;
       }
 
@@ -117,7 +128,10 @@ class McpClientWrapper {
     }
 
     try {
-      const response = await this.client!.listTools();
+      const response = await executeWithCircuitBreaker(
+        `mcp:${this.serverKey}:listTools`,
+        async () => this.client!.listTools()
+      );
       return (response.tools ?? []) as McpTool[];
     } catch (error) {
       console.error(`[MCP] Failed to list tools from ${this.serverUrl}:`, error);
@@ -134,10 +148,13 @@ class McpClientWrapper {
     }
 
     try {
-      const response = await this.client!.callTool({
-        name: toolName,
-        arguments: args
-      });
+      const response = await executeWithCircuitBreaker(
+        `mcp:${this.serverKey}:tool:${toolName}`,
+        async () => this.client!.callTool({
+          name: toolName,
+          arguments: args
+        })
+      );
 
       // Return the tool result
       return response.content ?? response;

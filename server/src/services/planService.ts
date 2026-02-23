@@ -8,6 +8,7 @@ import { redis } from '../../config/redis';
 import { incrementMetric } from './metricsService';
 import { emitPlanCreated, emitPlanStepStatus, emitPlanUpdated } from './socketService';
 import { appendRunEvent } from './conversationService';
+import { getCurrentWorkspaceId, getCurrentWorkspaceIdOrDefault, isWorkspaceMatch } from './workspaceContextService';
 
 const PLAN_KEY_PREFIX = 'plan:';
 const PLAN_INDEX_KEY = 'plans:index';
@@ -24,6 +25,7 @@ function serializePlan(plan: Plan): string {
 
 function deserializePlan(raw: string): Plan {
   const parsed = JSON.parse(raw) as Plan;
+  parsed.workspaceId = parsed.workspaceId ?? 'workspace-default';
   parsed.createdAt = new Date(parsed.createdAt);
   parsed.updatedAt = new Date(parsed.updatedAt);
   parsed.steps = parsed.steps.map((step) => ({
@@ -80,11 +82,21 @@ export async function initializePlans(): Promise<void> {
 }
 
 export function listPlans(): Plan[] {
-  return Array.from(plans.values());
+  return Array.from(plans.values())
+    .filter((plan) => isWorkspaceMatch(plan.workspaceId, getCurrentWorkspaceId()));
 }
 
 export function getPlan(planId: string): Plan | undefined {
-  return plans.get(planId);
+  const plan = plans.get(planId);
+  if (!plan) {
+    return undefined;
+  }
+
+  if (!isWorkspaceMatch(plan.workspaceId, getCurrentWorkspaceId())) {
+    return undefined;
+  }
+
+  return plan;
 }
 
 export async function createPlan(input: {
@@ -92,6 +104,7 @@ export async function createPlan(input: {
   createdByTaskId?: string;
   metadata?: Record<string, unknown>;
   steps: Array<{
+    id?: string;
     title: string;
     description?: string;
     agentId: string;
@@ -108,8 +121,10 @@ export async function createPlan(input: {
     const stepInput = input.steps[index];
     const previousStep = steps[index - 1];
 
+    const stepId = stepInput.id ?? generateId('step');
+
     steps.push({
-      id: generateId('step'),
+      id: stepId,
       planId,
       title: stepInput.title,
       description: stepInput.description,
@@ -125,6 +140,9 @@ export async function createPlan(input: {
 
   const plan: Plan = {
     id: planId,
+    workspaceId: typeof input.metadata?.workspaceId === 'string'
+      ? input.metadata.workspaceId
+      : getCurrentWorkspaceIdOrDefault() ?? 'workspace-default',
     objective: input.objective,
     status: 'active',
     createdByTaskId: input.createdByTaskId,
