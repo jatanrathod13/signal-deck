@@ -75,13 +75,25 @@ export function TaskQueue({ className }: TaskQueueProps) {
   const submitTask = useSubmitTask();
   const { isConnected } = useSocket();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setJsonError(null);
 
+    const formData = new FormData(e.currentTarget);
+    const finalAgentId = (formData.get('agentId') as string) || agentId;
+    const finalTaskType = (formData.get('taskType') as string) || taskType;
+    const finalExecutionMode = (formData.get('executionMode') as TaskExecutionMode) || executionMode;
+    const finalTaskData = (formData.get('taskData') as string) || taskData;
+    const finalPriority = parseInt(formData.get('priority') as string, 10) || priority;
+
+    if (!finalAgentId || !finalTaskType) {
+      setJsonError('Agent and Task Type are required');
+      return;
+    }
+
     let parsedData: Record<string, unknown>;
     try {
-      parsedData = JSON.parse(taskData);
+      parsedData = JSON.parse(finalTaskData);
     } catch {
       setJsonError('Invalid JSON in task data');
       return;
@@ -89,11 +101,11 @@ export function TaskQueue({ className }: TaskQueueProps) {
 
     try {
       await submitTask.mutateAsync({
-        agentId,
-        type: taskType,
+        agentId: finalAgentId,
+        type: finalTaskType,
         data: parsedData,
-        executionMode,
-        priority,
+        executionMode: finalExecutionMode,
+        priority: finalPriority,
       });
 
       setShowSubmitForm(false);
@@ -344,6 +356,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                 </label>
                 <select
                   id="agentId"
+                  name="agentId"
                   value={agentId}
                   onChange={(e) => setAgentId(e.target.value)}
                   required
@@ -364,6 +377,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                 </label>
                 <input
                   id="taskType"
+                  name="taskType"
                   type="text"
                   value={taskType}
                   onChange={(e) => setTaskType(e.target.value)}
@@ -379,6 +393,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                 </label>
                 <select
                   id="executionMode"
+                  name="executionMode"
                   value={executionMode}
                   onChange={(e) => setExecutionMode(e.target.value as TaskExecutionMode)}
                   className="input-field"
@@ -394,6 +409,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                 </label>
                 <input
                   id="priority"
+                  name="priority"
                   type="number"
                   min={1}
                   max={10}
@@ -409,6 +425,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
                 </label>
                 <textarea
                   id="taskData"
+                  name="taskData"
                   value={taskData}
                   onChange={(e) => setTaskData(e.target.value)}
                   rows={4}

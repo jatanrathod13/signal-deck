@@ -384,7 +384,7 @@ async function buildTools(
       description: 'Create and start a multi-step orchestration plan from an objective.',
       inputSchema: zodSchema(z.object({
         objective: z.string().describe('High-level objective to execute through multiple steps.'),
-        defaultAgentId: z.string().optional().describe('Agent ID to run steps. Defaults to the current task agent.'),
+        defaultAgentId: z.string().optional().describe('Optional Explicit Agent ID to run steps. Omit this to use the current task agent.'),
         stepPrompts: z.array(z.string()).optional().describe('Optional explicit prompts for each orchestration step.'),
         maxSteps: z.number().int().min(2).max(10).optional().describe('Optional limit for auto-generated steps.')
       })),
@@ -401,9 +401,11 @@ async function buildTools(
           maxSteps?: number;
         }
       ) => {
+        const actualAgentId = (defaultAgentId && defaultAgentId !== 'current-task-agent') 
+            ? defaultAgentId : task.agentId;
         const summary = await createAndStartPlan({
           objective,
-          defaultAgentId: defaultAgentId ?? task.agentId,
+          defaultAgentId: actualAgentId,
           stepPrompts,
           maxSteps,
           conversationId: task.conversationId,
