@@ -25,13 +25,13 @@ import { cn } from '../lib/utils';
 import { TaskItem } from './TaskItem';
 
 const statusGroups: { label: string; value: TaskStatus | 'all'; icon: React.ElementType; color: string }[] = [
-  { label: 'All', value: 'all', icon: ListChecks, color: 'text-slate-300' },
-  { label: 'Pending', value: 'pending', icon: Clock, color: 'text-amber-200' },
-  { label: 'Blocked', value: 'blocked', icon: Ban, color: 'text-orange-200' },
-  { label: 'Processing', value: 'processing', icon: PlayCircle, color: 'text-cyan-200' },
-  { label: 'Completed', value: 'completed', icon: CheckCircle, color: 'text-emerald-200' },
-  { label: 'Failed', value: 'failed', icon: XCircle, color: 'text-rose-200' },
-  { label: 'Cancelled', value: 'cancelled', icon: Ban, color: 'text-slate-400' },
+  { label: 'All', value: 'all', icon: ListChecks, color: 'text-[#d8c1a9]' },
+  { label: 'Pending', value: 'pending', icon: Clock, color: 'text-[#efc274]' },
+  { label: 'Blocked', value: 'blocked', icon: Ban, color: 'text-[#e6a565]' },
+  { label: 'Processing', value: 'processing', icon: PlayCircle, color: 'text-[#96f0d8]' },
+  { label: 'Completed', value: 'completed', icon: CheckCircle, color: 'text-[#9fe6b1]' },
+  { label: 'Failed', value: 'failed', icon: XCircle, color: 'text-[#f0a39d]' },
+  { label: 'Cancelled', value: 'cancelled', icon: Ban, color: 'text-[#c0ad98]' },
 ];
 const MAX_VISIBLE_PER_GROUP = 20;
 
@@ -246,6 +246,8 @@ export function TaskQueue({ className }: TaskQueueProps) {
 
   const totalCount = tasksList.length;
   const visibleCount = filteredTasks.length;
+  const processingCount = statusCounts.processing;
+  const failingCount = statusCounts.failed;
 
   const toggleGroupExpansion = (group: TaskStatus) => {
     setExpandedGroups((previous) => ({
@@ -269,23 +271,21 @@ export function TaskQueue({ className }: TaskQueueProps) {
 
   return (
     <section className={cn('space-y-4', className)}>
-      <header className="glass-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <header className="panel-elevated flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="rounded-xl border border-indigo-300/30 bg-indigo-300/10 p-2">
-            <ListChecks className="h-4 w-4 text-indigo-200" />
+          <div className="rounded-xl border border-[rgba(213,164,106,0.34)] bg-[rgba(213,164,106,0.16)] p-2">
+            <ListChecks className="h-4 w-4 text-[#f4dcc1]" />
           </div>
           <div>
-            <p className="kicker">Execution Queue</p>
-            <h2 className="panel-title">Tasks</h2>
+            <p className="kicker">Execution Operations</p>
+            <h2 className="panel-title text-[1.2rem]">Tasks</h2>
           </div>
-          <span className="rounded-lg border border-white/15 bg-slate-900/60 px-2 py-1 font-mono text-xs text-cyan-200">
-            <span className="inline-flex items-center gap-1">
-              <Timer className="h-3 w-3" />
-              {sessionTime}
-            </span>
+          <span className="status-pill warn font-mono">
+            <Timer className="h-3 w-3" />
+            {sessionTime}
           </span>
-          <span className={cn('signal-pill', !isConnected && 'border-slate-400/30 bg-slate-500/10 text-slate-300')}>
-            <span className={cn('status-dot', isConnected ? 'text-emerald-300 live-pulse' : 'text-slate-500')} />
+          <span className={cn('status-pill', !isConnected && 'muted')}>
+            <span className={cn('status-dot', isConnected ? 'text-[#9ef0d8] live-pulse' : 'text-[#8f7e6b]')} />
             {isConnected ? 'Live updates' : 'Offline'}
           </span>
         </div>
@@ -303,7 +303,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
           </button>
           <button
             onClick={() => setShowSubmitForm(true)}
-            className="btn-primary rounded-xl px-3 py-2 text-sm font-semibold"
+            className="command-button rounded-xl px-3 py-2 text-sm font-semibold"
           >
             <span className="inline-flex items-center gap-2">
               <Plus className="h-4 w-4" />
@@ -313,12 +313,30 @@ export function TaskQueue({ className }: TaskQueueProps) {
         </div>
       </header>
 
-      <div className="glass-panel p-3">
-        <label htmlFor="task-search" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="data-card p-3">
+          <p className="kicker mb-1">Queue Depth</p>
+          <p className="font-mono text-xl font-semibold text-[#f1dbc2]">{totalCount}</p>
+          <p className="text-xs text-[#b99f84]">All tasks in workspace queue</p>
+        </div>
+        <div className="data-card p-3">
+          <p className="kicker mb-1">Active Processing</p>
+          <p className="font-mono text-xl font-semibold text-[#a9f1dc]">{processingCount}</p>
+          <p className="text-xs text-[#b99f84]">Running now across agents</p>
+        </div>
+        <div className="data-card p-3">
+          <p className="kicker mb-1">Failure Pressure</p>
+          <p className="font-mono text-xl font-semibold text-[#efac9f]">{failingCount}</p>
+          <p className="text-xs text-[#b99f84]">Failed tasks requiring attention</p>
+        </div>
+      </div>
+
+      <div className="panel-elevated p-3">
+        <label htmlFor="task-search" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#c7af94]">
           Search Tasks
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-[#8d7a67]" />
           <input
             id="task-search"
             value={searchQuery}
@@ -330,7 +348,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
       </div>
 
       {showSubmitForm && (
-        <div className="glass-panel p-4">
+        <div className="panel-elevated p-4">
           <h3 className="panel-title mb-3 text-sm">Submit Task</h3>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <button
@@ -351,7 +369,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div>
-                <label htmlFor="agentId" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                <label htmlFor="agentId" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#c7af94]">
                   Agent
                 </label>
                 <select
@@ -372,7 +390,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
               </div>
 
               <div>
-                <label htmlFor="taskType" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                <label htmlFor="taskType" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#c7af94]">
                   Task Type
                 </label>
                 <input
@@ -388,7 +406,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
               </div>
 
               <div>
-                <label htmlFor="executionMode" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                <label htmlFor="executionMode" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#c7af94]">
                   Execution Mode
                 </label>
                 <select
@@ -404,7 +422,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
               </div>
 
               <div>
-                <label htmlFor="priority" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                <label htmlFor="priority" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#c7af94]">
                   Priority
                 </label>
                 <input
@@ -420,7 +438,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
               </div>
 
               <div className="md:col-span-2">
-                <label htmlFor="taskData" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">
+                <label htmlFor="taskData" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#c7af94]">
                   Data JSON
                 </label>
                 <textarea
@@ -429,14 +447,14 @@ export function TaskQueue({ className }: TaskQueueProps) {
                   value={taskData}
                   onChange={(e) => setTaskData(e.target.value)}
                   rows={4}
-                  className={cn('input-field font-mono', jsonError && 'border-rose-400/60 text-rose-100')}
+                  className={cn('input-field font-mono', jsonError && 'border-[rgba(241,131,122,0.6)] text-[#f6c3bd]')}
                 />
-                {jsonError && <p className="mt-1 text-xs text-rose-300">{jsonError}</p>}
+                {jsonError && <p className="mt-1 text-xs text-[#f3a79f]">{jsonError}</p>}
               </div>
             </div>
 
             {submitTask.error && (
-              <div className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm text-rose-100">
+              <div className="rounded-xl border border-[rgba(241,131,122,0.42)] bg-[rgba(241,131,122,0.14)] p-3 text-sm text-[#f7cabf]">
                 {submitTask.error.message || 'Failed to submit task'}
               </div>
             )}
@@ -445,7 +463,7 @@ export function TaskQueue({ className }: TaskQueueProps) {
               <button
                 type="submit"
                 disabled={submitTask.isPending}
-                className={cn('btn-primary rounded-xl px-4 py-2 text-sm font-semibold', submitTask.isPending && 'opacity-60')}
+                className={cn('command-button rounded-xl px-4 py-2 text-sm font-semibold', submitTask.isPending && 'opacity-60')}
               >
                 {submitTask.isPending ? (
                   <span className="inline-flex items-center gap-2">
@@ -480,12 +498,14 @@ export function TaskQueue({ className }: TaskQueueProps) {
               onClick={() => setStatusFilter(group.value)}
               className={cn(
                 'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-all',
-                statusFilter === group.value ? 'btn-primary' : 'btn-ghost'
+                statusFilter === group.value
+                  ? 'command-button'
+                  : 'btn-ghost'
               )}
             >
               <Icon className={cn('h-3.5 w-3.5', group.color)} />
               {group.label}
-              <span className="rounded-full border border-white/15 bg-slate-900/70 px-2 py-0.5 font-mono text-[10px] text-slate-300">
+              <span className="rounded-full border border-[rgba(226,204,180,0.24)] bg-[rgba(19,16,13,0.7)] px-2 py-0.5 font-mono text-[10px] text-[#cfb79c]">
                 {count}
               </span>
             </button>
@@ -494,26 +514,26 @@ export function TaskQueue({ className }: TaskQueueProps) {
       </div>
 
       {isLoading && (
-        <div className="glass-panel flex items-center justify-center py-10 text-slate-300">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin text-cyan-200" />
+        <div className="panel-elevated flex items-center justify-center py-10 text-[#d8c0a7]">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin text-[#efd2ab]" />
           Loading tasks...
         </div>
       )}
 
       {isError && (
-        <div className="glass-panel rounded-xl border border-rose-300/30 bg-rose-300/10 p-4 text-sm text-rose-100">
+        <div className="panel-elevated rounded-xl border border-[rgba(241,131,122,0.42)] bg-[rgba(241,131,122,0.12)] p-4 text-sm text-[#f7c8be]">
           <p className="font-semibold">Unable to load tasks</p>
-          <p className="mt-1 text-rose-200/90">{error?.message || 'Unknown error occurred'}</p>
+          <p className="mt-1 text-[#f7c8be]">{error?.message || 'Unknown error occurred'}</p>
         </div>
       )}
 
       {!isLoading && !isError && visibleCount === 0 && (
-        <div className="glass-panel p-8 text-center">
-          <ListChecks className="mx-auto mb-3 h-10 w-10 text-slate-500" />
-          <p className="font-medium text-slate-200">
+        <div className="panel-elevated p-8 text-center">
+          <ListChecks className="mx-auto mb-3 h-10 w-10 text-[#8e7b67]" />
+          <p className="font-medium text-[#ebdccb]">
             {searchQuery ? 'No matching tasks' : statusFilter === 'all' ? 'No tasks available' : `No ${statusFilter} tasks`}
           </p>
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-[#b89f84]">
             {searchQuery ? 'Try a different search query.' : totalCount === 0 ? 'Submit a task to start execution.' : 'Try another status filter.'}
           </p>
         </div>
@@ -531,16 +551,16 @@ export function TaskQueue({ className }: TaskQueueProps) {
                 const visibleTasks = getVisibleGroupTasks(group);
                 const hiddenCount = groupedTasks[group].length - visibleTasks.length;
                 const titleColor = group === 'processing'
-                  ? 'text-cyan-200'
+                  ? 'text-[#a9f1dc]'
                   : group === 'pending'
-                    ? 'text-amber-200'
+                    ? 'text-[#efc274]'
                     : group === 'blocked'
-                      ? 'text-orange-200'
+                      ? 'text-[#e6a565]'
                       : group === 'failed'
-                        ? 'text-rose-200'
+                        ? 'text-[#efac9f]'
                         : group === 'completed'
-                          ? 'text-emerald-200'
-                          : 'text-slate-400';
+                          ? 'text-[#9fe6b1]'
+                          : 'text-[#c0ad98]';
 
                 return (
                   <div key={group} className="space-y-2">

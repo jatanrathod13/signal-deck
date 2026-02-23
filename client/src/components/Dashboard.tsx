@@ -2,8 +2,8 @@
  * Dashboard Component
  * Main application shell with tabbed panels
  */
-import { useEffect, useState } from 'react';
-import { Activity, BellRing, Bot, CalendarClock, Database, Eye, ListChecks, Users } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BellRing, Bot, CalendarClock, Database, Eye, ListChecks, Users } from 'lucide-react';
 import { AgentWorkspace } from './AgentWorkspace';
 import { AgentDeploy } from './AgentDeploy';
 import { AgentList } from './AgentList';
@@ -19,17 +19,19 @@ type TabType = 'workspace' | 'agents' | 'tasks' | 'observability' | 'schedules' 
 interface TabConfig {
   id: TabType;
   label: string;
+  shortLabel: string;
   icon: React.ElementType;
+  note: string;
 }
 
 const tabs: TabConfig[] = [
-  { id: 'workspace', label: 'Workspace', icon: Bot },
-  { id: 'agents', label: 'Agents', icon: Users },
-  { id: 'tasks', label: 'Tasks', icon: ListChecks },
-  { id: 'observability', label: 'Observability', icon: Eye },
-  { id: 'schedules', label: 'Schedules', icon: CalendarClock },
-  { id: 'webhooks', label: 'Webhooks', icon: BellRing },
-  { id: 'memory', label: 'Memory', icon: Database },
+  { id: 'workspace', label: 'Workspace', shortLabel: 'Work', icon: Bot, note: 'Objective intake + orchestration' },
+  { id: 'agents', label: 'Agents', shortLabel: 'Agents', icon: Users, note: 'Deploy and manage agent fleet' },
+  { id: 'tasks', label: 'Tasks', shortLabel: 'Tasks', icon: ListChecks, note: 'Queue, stream, and control execution' },
+  { id: 'observability', label: 'Observability', shortLabel: 'Observe', icon: Eye, note: 'Live telemetry and run health' },
+  { id: 'schedules', label: 'Schedules', shortLabel: 'Sched', icon: CalendarClock, note: 'Automated recurring triggers' },
+  { id: 'webhooks', label: 'Webhooks', shortLabel: 'Hooks', icon: BellRing, note: 'Inbound automation endpoints' },
+  { id: 'memory', label: 'Memory', shortLabel: 'Memory', icon: Database, note: 'Shared context and facts' },
 ];
 
 interface DashboardProps {
@@ -54,6 +56,8 @@ export function Dashboard({ className }: DashboardProps) {
 
     return () => clearInterval(timer);
   }, []);
+
+  const activeTabMeta = useMemo(() => tabs.find((tab) => tab.id === activeTab) ?? tabs[0], [activeTab]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -83,36 +87,27 @@ export function Dashboard({ className }: DashboardProps) {
 
   return (
     <div className={cn('app-shell', className)}>
-      <div className="mesh-bg" />
+      <div className="editorial-bg" />
 
-      <div className="relative z-10">
-        <header className="border-b border-white/10 bg-[#0b1020]/75 backdrop-blur-xl">
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-300/30 bg-cyan-300/10">
-                  <Activity className="h-5 w-5 text-cyan-200" />
-                </div>
-                <div>
-                  <p className="kicker">Agent Orchestration Platform</p>
-                  <h1 className="text-2xl font-semibold tracking-tight text-slate-100">Signal Deck</h1>
-                </div>
-              </div>
+      <div className="relative z-10 shell-grid">
+        <aside className="shell-rail">
+          <div className="mb-5">
+            <p className="kicker">Agent Orchestration Platform</p>
+            <h1 className="page-title">Signal Deck</h1>
+          </div>
 
-              <div className="hidden items-center gap-3 md:flex">
-                <span className="signal-pill">
-                  <span className="status-dot live-pulse" />
-                  Live
-                </span>
-                <div className="glass-panel px-3 py-2">
-                  <div className="kicker">Session Time</div>
-                  <div className="font-mono text-sm text-cyan-100">{clock}</div>
-                </div>
-              </div>
+          <div className="mb-5 data-card p-3">
+            <p className="kicker mb-2">Runtime Status</p>
+            <div className="flex items-center justify-between">
+              <span className="signal-pill">
+                <span className="status-dot live-pulse" />
+                Live
+              </span>
+              <span className="font-mono text-sm text-[#f0ddc7]">{clock}</span>
             </div>
           </div>
 
-          <nav className="mx-auto hidden max-w-7xl gap-2 px-4 pb-4 sm:flex sm:px-6 lg:px-8">
+          <nav className="space-y-1.5" aria-label="Dashboard sections">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -120,22 +115,41 @@ export function Dashboard({ className }: DashboardProps) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'surface-lift inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200',
-                    isActive ? 'btn-primary text-cyan-50' : 'btn-ghost'
-                  )}
+                  className={cn('rail-nav-button', isActive && 'active')}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon className="h-4 w-4" />
-                  {tab.label}
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
           </nav>
-        </header>
+        </aside>
 
-        <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:pb-8">{renderContent()}</main>
+        <div className="min-w-0 px-3 pb-24 pt-4 sm:px-5 lg:px-8 lg:pb-8 lg:pt-6 page-in">
+          <header className="top-command mb-5">
+            <div>
+              <p className="kicker">Current Surface</p>
+              <h2 className="panel-title text-[1.35rem]">{activeTabMeta.label}</h2>
+              <p className="mt-1 text-sm text-[#bfa890]">{activeTabMeta.note}</p>
+            </div>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-white/10 bg-[#0b1020]/85 px-3 py-2 backdrop-blur-xl sm:hidden">
+            <div className="hidden items-center gap-3 md:flex">
+              <span className="status-pill">
+                <span className="status-dot live-pulse" />
+                Realtime
+              </span>
+              <span className="status-pill warn">Governed</span>
+              <button className="command-button px-3 py-2 text-xs font-semibold uppercase tracking-wide">
+                Control Plane Active
+              </button>
+            </div>
+          </header>
+
+          <main>{renderContent()}</main>
+        </div>
+
+        <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-[rgba(226,204,180,0.24)] bg-[rgba(16,13,10,0.95)] px-2.5 py-2 backdrop-blur-md sm:hidden">
           <div className="flex gap-2 overflow-x-auto pb-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -144,10 +158,15 @@ export function Dashboard({ className }: DashboardProps) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={cn('surface-lift inline-flex min-w-[92px] flex-col items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium', isActive ? 'btn-primary' : 'btn-ghost')}
+                  className={cn(
+                    'surface-lift inline-flex min-w-[84px] flex-col items-center gap-1 rounded-lg border px-2 py-2 text-[11px] font-semibold',
+                    isActive
+                      ? 'border-[rgba(213,164,106,0.62)] bg-[rgba(213,164,106,0.19)] text-[#fff2df]'
+                      : 'border-[rgba(226,204,180,0.2)] bg-[rgba(28,23,19,0.75)] text-[#c5af96]'
+                  )}
                 >
                   <Icon className="h-4 w-4" />
-                  {tab.label}
+                  {tab.shortLabel}
                 </button>
               );
             })}

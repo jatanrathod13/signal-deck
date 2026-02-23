@@ -28,32 +28,32 @@ import { cn } from '../lib/utils';
 const statusConfig: Record<TaskStatus, { label: string; color: string; icon: React.ElementType }> = {
   pending: {
     label: 'Pending',
-    color: 'bg-amber-300/12 text-amber-100 border border-amber-300/30',
+    color: 'bg-[rgba(227,181,102,0.14)] text-[#f2d2a2] border border-[rgba(227,181,102,0.38)]',
     icon: Clock,
   },
   processing: {
     label: 'Processing',
-    color: 'bg-cyan-300/12 text-cyan-100 border border-cyan-300/30',
+    color: 'bg-[rgba(89,217,184,0.14)] text-[#bdf4e7] border border-[rgba(89,217,184,0.4)]',
     icon: Loader2,
   },
   blocked: {
     label: 'Blocked',
-    color: 'bg-orange-300/12 text-orange-100 border border-orange-300/30',
+    color: 'bg-[rgba(230,165,101,0.14)] text-[#f0c59a] border border-[rgba(230,165,101,0.38)]',
     icon: PauseCircle,
   },
   completed: {
     label: 'Completed',
-    color: 'bg-emerald-300/12 text-emerald-100 border border-emerald-300/30',
+    color: 'bg-[rgba(121,213,151,0.14)] text-[#c4f3d1] border border-[rgba(121,213,151,0.38)]',
     icon: CheckCircle,
   },
   failed: {
     label: 'Failed',
-    color: 'bg-rose-300/12 text-rose-100 border border-rose-300/30',
+    color: 'bg-[rgba(241,131,122,0.14)] text-[#f7c3bc] border border-[rgba(241,131,122,0.4)]',
     icon: XCircle,
   },
   cancelled: {
     label: 'Cancelled',
-    color: 'bg-slate-500/12 text-slate-300 border border-slate-400/30',
+    color: 'bg-[rgba(160,141,122,0.16)] text-[#d8c5b1] border border-[rgba(160,141,122,0.34)]',
     icon: Ban,
   },
 };
@@ -220,17 +220,17 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
   return (
     <article
       className={cn(
-        'glass-panel surface-lift border p-4 transition-all duration-200',
-        showCompletionAnimation && 'ring-2 ring-emerald-300/35',
+        'data-card surface-lift border p-4 transition-all duration-200',
+        showCompletionAnimation && 'ring-2 ring-[rgba(121,213,151,0.45)]',
         className
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            {isPolePosition && <Trophy className="h-4 w-4 text-amber-200" />}
+            {isPolePosition && <Trophy className="h-4 w-4 text-[#f2d39d]" />}
             {position !== undefined && (
-              <span className="rounded-lg border border-white/15 bg-slate-900/70 px-2 py-1 text-[10px] font-semibold text-slate-300">
+              <span className="rounded-lg border border-[rgba(226,204,180,0.24)] bg-[rgba(17,14,11,0.72)] px-2 py-1 text-[10px] font-semibold text-[#d6bda2]">
                 #{position}
               </span>
             )}
@@ -240,13 +240,13 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
             </span>
           </div>
 
-          <p className="truncate text-sm font-semibold text-slate-100">{currentTask.type || 'Unknown task type'}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+          <p className="truncate text-sm font-semibold text-[#f0dfcc]">{currentTask.type || 'Unknown task type'}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[#b79f88]">
             <span className="font-mono">id: {currentTask.id.slice(0, 8)}...</span>
             <span className="font-mono">priority: {currentTask.priority}</span>
             {currentTask.agentId && <span className="font-mono">agent: {currentTask.agentId.slice(0, 8)}...</span>}
             <span className="font-mono">mode: {executionLabel}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-2 py-0.5 font-mono text-cyan-200">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(19,16,13,0.78)] px-2 py-0.5 font-mono text-[#f0cfa8]">
               <Timer className="h-3 w-3" />
               {elapsed}
             </span>
@@ -260,8 +260,8 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
               className={cn(
                 'rounded-lg border px-2 py-1 text-xs font-semibold transition-all',
                 isStreaming
-                  ? 'border-cyan-300/35 bg-cyan-300/15 text-cyan-100'
-                  : 'btn-ghost border-white/15 text-slate-200'
+                  ? 'border-[rgba(89,217,184,0.4)] bg-[rgba(89,217,184,0.18)] text-[#bcf3e6]'
+                  : 'btn-ghost border-[rgba(226,204,180,0.24)] text-[#ddc5ad]'
               )}
               title={isStreaming ? 'Stop streaming' : 'Stream execution'}
             >
@@ -279,8 +279,8 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
               className={cn(
                 'rounded-lg border px-2 py-1 text-xs font-semibold transition-all',
                 isLoading
-                  ? 'cursor-not-allowed border-slate-500/25 bg-slate-600/15 text-slate-500'
-                  : 'border-rose-300/30 bg-rose-300/15 text-rose-100 hover:bg-rose-300/25'
+                  ? 'cursor-not-allowed border-[rgba(160,141,122,0.24)] bg-[rgba(86,73,62,0.22)] text-[#9d8d7d]'
+                  : 'border-[rgba(241,131,122,0.4)] bg-[rgba(241,131,122,0.18)] text-[#f7cec7] hover:bg-[rgba(241,131,122,0.3)]'
               )}
               title="Cancel task"
             >
@@ -296,7 +296,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
               onClick={handleRetry}
               disabled={isLoading}
               className={cn(
-                'rounded-lg border border-amber-300/30 bg-amber-300/15 px-2 py-1 text-xs font-semibold text-amber-100 transition-all hover:bg-amber-300/25',
+                'rounded-lg border border-[rgba(227,181,102,0.4)] bg-[rgba(227,181,102,0.16)] px-2 py-1 text-xs font-semibold text-[#f4d6ab] transition-all hover:bg-[rgba(227,181,102,0.28)]',
                 isLoading && 'cursor-not-allowed opacity-60'
               )}
               title="Retry task"
@@ -310,19 +310,19 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
         </div>
       </div>
 
-      <div className="mt-2 text-[11px] text-slate-500">
+      <div className="mt-2 text-[11px] text-[#a79077]">
         Started: {formatDate(currentTask.createdAt)} | Updated: {formatDate(currentTask.updatedAt)}
       </div>
 
       {currentTask.status === 'completed' && currentTask.result !== undefined && currentTask.result !== null && (
-        <div className="mt-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-2 py-1 text-xs text-emerald-100">
+        <div className="mt-2 rounded-lg border border-[rgba(121,213,151,0.35)] bg-[rgba(121,213,151,0.14)] px-2 py-1 text-xs text-[#c8f2d1]">
           {getResultPreview(currentTask.result)}
         </div>
       )}
 
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-slate-300 transition-colors hover:text-cyan-100"
+        className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#cfb79e] transition-colors hover:text-[#f2dec8]"
       >
         {isExpanded ? (
           <>
@@ -338,10 +338,10 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
       </button>
 
       {isExpanded && (
-        <div className="tab-in mt-3 space-y-3 border-t border-white/10 pt-3">
+        <div className="tab-in mt-3 space-y-3 border-t border-[rgba(226,204,180,0.2)] pt-3">
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Execution Context</h4>
-            <div className="rounded-lg border border-white/10 bg-slate-900/40 p-2 text-xs text-slate-300">
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#cfb79e]">Execution Context</h4>
+            <div className="rounded-lg border border-[rgba(226,204,180,0.2)] bg-[rgba(17,14,11,0.7)] p-2 text-xs text-[#d4bea6]">
               <p>plan: {currentTask.planId ?? 'n/a'}</p>
               <p>step: {currentTask.stepId ?? 'n/a'}</p>
               <p>parent: {currentTask.parentTaskId ?? 'n/a'}</p>
@@ -351,13 +351,13 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
           </div>
 
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Task Data</h4>
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#cfb79e]">Task Data</h4>
             <pre className="code-block max-h-64 overflow-auto p-2 text-xs">{String(JSON.stringify(currentTask.data, null, 2))}</pre>
           </div>
 
           {(status === 'processing' || liveOutput || liveError) && (
             <div>
-              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-cyan-100">
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#b6f0df]">
                 Live Execution Logs
                 {status === 'processing' && ' (active)'}
               </h4>
@@ -366,12 +366,12 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
                 {status === 'processing' && <span className="animate-pulse">▊</span>}
               </pre>
               {liveError && (
-                <pre className="mt-2 code-block max-h-48 overflow-auto border border-rose-300/30 bg-rose-300/10 p-2 text-xs text-rose-100">
+                <pre className="mt-2 code-block max-h-48 overflow-auto border border-[rgba(241,131,122,0.42)] bg-[rgba(241,131,122,0.14)] p-2 text-xs text-[#f7c8be]">
                   {liveError}
                 </pre>
               )}
               {currentTask.lastLogAt && (
-                <div className="mt-1 text-xs text-slate-400">
+                <div className="mt-1 text-xs text-[#b8a188]">
                   last log: {formatDate(currentTask.lastLogAt)}
                 </div>
               )}
@@ -380,27 +380,27 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
 
           {currentTask.result !== undefined && (
             <div>
-              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-100">Result</h4>
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#c8f2d1]">Result</h4>
               {getResultDetails(currentTask.result).message ? (
-                <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100">
+                <div className="rounded-lg border border-[rgba(121,213,151,0.35)] bg-[rgba(121,213,151,0.14)] p-3 text-sm text-[#d3f5dc]">
                   <p>{getResultDetails(currentTask.result).message}</p>
                   {(getResultDetails(currentTask.result).model || getResultDetails(currentTask.result).steps !== undefined) && (
-                    <div className="mt-2 text-xs text-emerald-200/90">
+                    <div className="mt-2 text-xs text-[#b9e8c7]">
                       model: {getResultDetails(currentTask.result).model ?? 'n/a'} | steps:{' '}
                       {getResultDetails(currentTask.result).steps ?? 'n/a'}
                     </div>
                   )}
                 </div>
               ) : (
-                <pre className="code-block max-h-64 overflow-auto p-2 text-xs text-emerald-100">
+                <pre className="code-block max-h-64 overflow-auto p-2 text-xs text-[#d3f5dc]">
                   {String(JSON.stringify(currentTask.result, null, 2))}
                 </pre>
               )}
 
               {typeof currentTask.result === 'object' && currentTask.result !== null && (
                 <div className="mt-2">
-                  <h5 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Execution Metadata</h5>
-                  <pre className="code-block max-h-48 overflow-auto p-2 text-xs text-slate-200">
+                  <h5 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#cfb79e]">Execution Metadata</h5>
+                  <pre className="code-block max-h-48 overflow-auto p-2 text-xs text-[#d4bea6]">
                     {String(
                       JSON.stringify(
                         (currentTask.result as { metadata?: unknown }).metadata ?? {},
@@ -416,7 +416,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
 
           {(streamingOutput || isStreaming) && (
             <div>
-              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-cyan-100">
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#b6f0df]">
                 Stream Output {isStreaming && '(live)'}
               </h4>
               <pre ref={outputRef} className="code-block max-h-80 overflow-auto p-2 text-xs">
@@ -424,7 +424,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
                 {isStreaming && <span className="animate-pulse">▊</span>}
               </pre>
               {streamMetadata && (
-                <div className="mt-1 text-xs text-slate-400">
+                <div className="mt-1 text-xs text-[#b8a188]">
                   steps: {streamMetadata.steps || 0} | tool calls: {streamMetadata.toolCalls || 0}
                   {streamMetadata.finishReason && ` | finish: ${streamMetadata.finishReason}`}
                 </div>
@@ -433,7 +433,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
           )}
 
           {streamingError && (
-            <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 p-2 text-xs text-rose-100">
+            <div className="rounded-lg border border-[rgba(241,131,122,0.4)] bg-[rgba(241,131,122,0.14)] p-2 text-xs text-[#f7cabf]">
               <div className="inline-flex items-center gap-1 font-semibold">
                 <AlertCircle className="h-3 w-3" />
                 Stream Error
@@ -443,7 +443,7 @@ export function TaskItem({ task, className, position, isPolePosition }: TaskItem
           )}
 
           {currentTask.error && (currentTask.status === 'failed' || currentTask.status === 'cancelled') && (
-            <div className="rounded-lg border border-rose-300/25 bg-rose-300/10 p-2 text-xs text-rose-100">
+            <div className="rounded-lg border border-[rgba(241,131,122,0.4)] bg-[rgba(241,131,122,0.14)] p-2 text-xs text-[#f7cabf]">
               <div className="inline-flex items-center gap-1 font-semibold">
                 <AlertCircle className="h-3 w-3" />
                 Task Error

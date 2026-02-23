@@ -1,42 +1,32 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {
       colors: {
-        // Ferrari Racing Theme
-        bg: {
-          primary: '#0a0a0a',
-          secondary: '#141414',
-          tertiary: '#1e1e1e',
-        },
-        accent: {
-          primary: '#ff2800',
-          secondary: '#ffcc00',
-          glow: 'rgba(255, 40, 0, 0.4)',
-        },
-        text: {
-          primary: '#ffffff',
-          secondary: '#a0a0a0',
-        },
-        status: {
-          running: '#00ff88',
-          idle: '#ffaa00',
-          error: '#ff2800',
-        },
-        border: {
-          subtle: '#2a2a2a',
+        editorial: {
+          bg: '#0b0a08',
+          surface: '#221c17',
+          line: '#e2ccb433',
+          text: '#f4ede2',
+          muted: '#a7927b',
+          accent: '#d5a46a',
+          live: '#59d9b8',
+          danger: '#f1837a',
         },
       },
       fontFamily: {
-        display: ['Orbitron', 'sans-serif'],
-        body: ['Rajdhani', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Fraunces', 'serif'],
+        body: ['Manrope', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'monospace'],
+      },
+      boxShadow: {
+        editorial: '0 24px 52px rgba(0, 0, 0, 0.44)',
       },
     },
   },
   plugins: [],
-}
+};
