@@ -1,258 +1,167 @@
-# Prioritized Roadmap - Filling the Gaps
+# Signal Deck Roadmap
 
-> Generated: 2026-02-22
-> Based on platform capability analysis
+Updated: February 23, 2026
 
----
+## North Star
 
-## Vision
+Build the best open-source control plane for AI execution:
 
-Transform this platform from a solid agent orchestration foundation into a **production-ready, universally applicable AI agent platform** that can power any use case—from IoT/Arduino control to enterprise automation.
+**Objective -> deterministic plan -> governed execution -> verifiable outcome**
 
----
+## Product Scope (New Direction)
 
-## Priority 1: Critical for Production (Month 1)
+Signal Deck is not a generic chatbot framework.  
+Signal Deck is an execution platform for teams that need:
 
-### 1.1 Persistence Layer (Supabase)
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Add Supabase | Set up Supabase project + TypeScript client | Easy | 1 day |
-| Database Schema | Create tables for agents, tasks, plans, runs | Easy | 2 days |
-| Agent Config Storage | Save agent configurations to DB | Easy | 1 day |
-| Task History | Persist task execution history | Easy | 1 day |
+- Multi-step orchestration
+- Human-in-the-loop approvals
+- Production-grade observability and reliability
+- Repeatable automations (schedules, webhooks, APIs)
 
-**Why:** Supabase provides PostgreSQL + built-in Auth, Realtime, and auto-generated REST/GraphQL APIs. Eliminates need for separate auth implementation.
+## Current Baseline (Already Implemented)
 
-### 1.2 Authentication & Authorization (Supabase Auth)
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Supabase Auth Integration | Use Supabase Auth (email, OAuth, SSO) | Easy | 1 day |
-| Role-Based Access | Implement admin/user roles via RLS policies | Easy | 1 day |
-| API Key Management | Generate API keys via Supabaseanon/ service roles | Easy | 0.5 day |
+- Chat-first objective submission and run events
+- Orchestration modes: sequential, parallel, DAG
+- Queue-backed worker execution (BullMQ)
+- Tool-loop and Claude CLI execution modes
+- Run intelligence and artifacts endpoints
+- Governance approvals, quotas, and audit hooks
+- Reliability controls (rate limiting, circuit breakers, DLQ)
+- Scheduler and webhook subsystems
+- Supabase schema and feature-flagged persistence/auth bridges
 
-**Why:** Supabase provides built-in auth with email/password, OAuth (Google, GitHub, etc.), and row-level security. No need to build JWT auth from scratch.
+## 2026 Roadmap
 
-### 1.3 Health Checks & Observability
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Health Endpoints | `/health`, `/ready` for K8s | Easy | 0.5 day |
-| Metrics Export | Prometheus-compatible metrics | Easy | 1 day |
-| Structured Logging | JSON logs with correlation IDs | Easy | 1 day |
+## Phase 1 (Weeks 1-4)
 
-**Why:** Required for container orchestration and monitoring.
+### Theme
+Objective-to-outcome reliability.
 
----
+### Deliverables
 
-## Priority 2: Essential for Usability (Month 2)
+1. Make plan creation deterministic for objective runs (explicit planning contract, fewer heuristic branches).
+2. Ensure every objective run can be traced from root task to terminal status with consistent artifacts.
+3. Add full integration tests for:
+   - objective submission -> plan creation -> child tasks -> completion
+   - failure paths and retry paths
+4. Harden run summaries to always produce operator-grade end-state output.
 
-### 2.1 Web Dashboard
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Agent Management UI | Create/Edit/Delete agents | Medium | 3 days |
-| Task Monitoring UI | Real-time task status dashboard | Medium | 2 days |
-| Execution Logs UI | View agent stdout/stderr | Easy | 1 day |
-| Settings Page | Configure flags, env vars | Easy | 1 day |
+### Exit Criteria
 
-**Why:** Users need a visual interface to manage agents.
+1. >= 95% run completion for internal benchmark objectives.
+2. 100% of runs include consistent run timeline + summary.
+3. No silent failures (all failures observable with reason).
 
-### 2.2 Task Scheduling
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Cron Integration | Run tasks on schedule | Medium | 2 days |
-| Recurring Tasks | Repeat tasks on interval | Medium | 2 days |
-| Calendar View | Visualize scheduled tasks | Easy | 1 day |
+## Phase 2 (Weeks 5-8)
 
-**Why:** Many use cases require scheduled automation.
+### Theme
+Trust and human control.
 
-### 2.3 Webhooks & Events
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Webhook Triggers | Start agents via HTTP POST | Easy | 1 day |
-| Webhook Notifications | Call URLs on task completion | Easy | 1 day |
-| Event Bus | Internal event system for extensibility | Medium | 2 days |
+### Deliverables
 
-**Why:** Need to integrate with external systems.
+1. Approval UX parity for all gated actions (not only API-level lifecycle).
+2. Evaluator loop promotion from heuristic to stronger model-backed evaluation flow.
+3. Run intelligence UX:
+   - clear phases
+   - bottleneck surfacing
+   - tool failure diagnostics
+4. Operator playbooks for fail/rollback/requeue workflows.
 
----
+### Exit Criteria
 
-## Priority 3: Enterprise Features (Month 3)
+1. High-risk tool actions are fully pausable/resumable with approvals.
+2. Operators can diagnose failed runs in under 5 minutes from UI.
+3. Evaluation signals are visible and actionable per run.
 
-### 3.1 Multi-Tenancy (Supabase Organizations)
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Supabase Organizations | Use Supabase orgs for workspace isolation | Easy | 1 day |
-| Workspace RBAC | Per-workspace permissions via RLS | Medium | 2 days |
-| Usage Quotas | Limit resources per workspace | Medium | 2 days |
+## Phase 3 (Weeks 9-14)
 
-**Why:** Supabase Organizations provides built-in multi-tenancy with isolated billing and RBAC.
+### Theme
+Production data plane hardening.
 
-### 3.2 Advanced Governance
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Approval Workflows | Multi-level approval chains | Medium | 2 days |
-| Audit Logging | Track all actions for compliance | Medium | 2 days |
-| Policy Engine | Complex rule-based governance | Hard | 5 days |
+### Deliverables
 
-**Why:** Regulated industries need compliance.
+1. Supabase persistence parity for all core runtime entities (not only partial bridges).
+2. Make workspace-scoped auth + membership checks default production path.
+3. Storage migration docs and rollout scripts for Redis->Supabase ownership boundaries.
+4. Data retention and archival policies for run/event growth.
 
-### 3.3 Caching & Performance
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Redis Caching | Cache MCP tool schemas | Easy | 1 day |
-| Response Caching | Cache repeated LLM responses | Medium | 2 days |
-| Connection Pooling | Optimize DB/Redis connections | Easy | 1 day |
+### Exit Criteria
 
-**Why:** Performance at scale.
+1. Restart-safe execution with durable state across agents/tasks/plans/runs/events.
+2. Tenant boundaries validated with integration tests.
+3. Runbook for migration and rollback validated in staging.
 
----
+## Phase 4 (Weeks 15-22)
 
-## Priority 4: Universal Integrations (Month 4)
+### Theme
+Open-source extensibility and adoption.
 
-### 4.1 IoT/Arduino Support
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Arduino MCP Template | Pre-configured MCP for Arduino | Easy | 1 day |
-| Johnny-Five Integration | CLI mode for hardware control | Easy | 2 days |
-| ESP32 Support | WiFi-enabled device control | Medium | 3 days |
-| Home Assistant MCP | Smart home integration | Medium | 3 days |
+### Deliverables
 
-**Why:** Unlock physical world control.
+1. Stable plugin/integration contract for tools and provider adapters.
+2. Template packs for common use cases:
+   - software delivery
+   - incident operations
+   - research synthesis
+3. Better SDK ergonomics and CLI coverage for automation teams.
+4. Contributor experience improvements (issue templates, examples, docs paths).
 
-### 4.2 More MCP Servers
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Filesystem MCP | Advanced file operations | Easy | 0.5 day |
-| GitHub MCP | Issues, PRs, actions | Easy | 1 day |
-| Database MCP | Query Supabase/Postgres via MCP | Easy | 1 day |
-| Browser MCP | Playwright automation | Medium | 2 days |
+### Exit Criteria
 
-**Why:** More tools = more use cases.
+1. External contributors can add a new integration without touching core runtime.
+2. Time-to-first-success for new users < 15 minutes.
+3. SDK/CLI cover top day-1 workflows.
 
-### 4.3 External AI Providers
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Anthropic Support | Claude models via Supabase Edge Functions | Easy | 1 day |
-| Google AI | Gemini models via Supabase Edge Functions | Easy | 1 day |
-| Local Models | Ollama/LM Studio integration | Medium | 2 days |
+## Phase 5 (Weeks 23-32)
 
-**Why:** Vendor flexibility. Use Supabase Edge Functions as the AI gateway layer.
+### Theme
+Scale and team operations.
 
----
+### Deliverables
 
-## Priority 5: Polish & Scale (Month 5+)
+1. Multi-agent capacity controls and workload balancing improvements.
+2. Advanced DAG features (branching policies, retries, compensation hooks).
+3. SLO dashboards and automated rollback guards.
+4. Usage analytics for workspace-level cost and performance governance.
 
-### 5.1 Developer Experience
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| CLI Tool | Manage agents from terminal | Medium | 3 days |
-| SDK/Client Library | TypeScript client for integrations | Medium | 3 days |
-| Documentation | Auto-generated API docs | Easy | 2 days |
+### Exit Criteria
 
-### 5.2 Reliability
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| Circuit Breakers | Prevent cascade failures | Medium | 2 days |
-| Dead Letter Queue | Handle failed tasks gracefully | Easy | 1 day |
-| Rate Limiting | Per-user/IP rate limits | Easy | 1 day |
+1. Stable performance under sustained concurrency benchmarks.
+2. Documented operational SLOs with alerting thresholds.
+3. Large-run scenarios complete with predictable latency and failure handling.
 
-### 5.3 Advanced Orchestration
-| Task | Description | Difficulty | Effort |
-|------|-------------|------------|--------|
-| DAG Workflows | Complex dependency graphs | Hard | 5 days |
-| Dynamic Agent Pools | Auto-scale agents based on load | Hard | 5 days |
-| Agent Marketplace | Share/import agent templates | Medium | 3 days |
+## Open Source Execution Plan
 
----
+## Immediate Repo Priorities
 
-## Quick Win: Immediate Impact Tasks
+1. Keep `README.md`, `ROADMAP.md`, and product docs current every phase.
+2. Label issues by phase (`phase-1`, `phase-2`, etc.) and onboarding (`good-first-issue`).
+3. Publish reference examples in-repo for repeatable objective runs.
 
-These can be done in the first week:
+## Community Hooks
 
-1. **Add health endpoints** - 0.5 day
-2. **Add structured logging** - 1 day
-3. **Add Prometheus metrics** - 1 day
-4. **Add API key auth** - 1 day
-5. **Document environment variables** - 0.5 day
-6. **Add Docker support** - 1 day
+1. Public benchmark objectives and weekly run-quality reports.
+2. “Build with Signal Deck” integration examples.
+3. Contributor calls for focused roadmap slices, not random feature drift.
 
----
+## Success Metrics
 
-## Dependency Map
+## Product Metrics
 
-```
-Priority 1 (Critical)
-├── 1.1 Persistence Layer
-│   └── Required for: Everything
-├── 1.2 Authentication
-│   └── Required for: Priority 2+
-└── 1.3 Health Checks
-    └── Required for: Priority 2+
+1. Objective completion rate.
+2. Median time from objective submission to terminal run status.
+3. Approval turnaround latency.
+4. Failure recoverability rate (retry/requeue success).
 
-Priority 2 (Usability)
-├── 2.1 Web Dashboard
-│   └── Required for: Enterprise sales
-├── 2.2 Task Scheduling
-│   └── Independent
-└── 2.3 Webhooks
-    └── Required for: Priority 3
+## Open Source Metrics
 
-Priority 3 (Enterprise)
-├── 3.1 Multi-tenancy
-│   └── Required for: Priority 5
-├── 3.2 Governance
-│   └── Independent
-└── 3.3 Caching
-    └── Required for: Scale
+1. Time to first successful local run for new contributors.
+2. Docs completeness and stale-doc regression rate.
+3. External contribution throughput per phase.
 
-Priority 4 (Integrations)
-├── 4.1 IoT Support
-│   └── Independent
-├── 4.2 More MCP
-│   └── Independent
-└── 4.3 More AI Providers
-    └── Independent
+## Not in Scope (For Now)
 
-Priority 5 (Polish)
-└── All independent
-```
+1. Broad “AI everything” expansion that does not improve objective-to-outcome execution.
+2. Unbounded provider/integration additions without stable contracts.
+3. UI-only polish work disconnected from runtime reliability, governance, or observability outcomes.
 
----
-
-## Effort Estimate Summary
-
-| Priority | Total Effort | Timeline |
-|----------|--------------|----------|
-| P1: Critical | ~10 days | Month 1 |
-| P2: Essential | ~15 days | Month 2 |
-| P3: Enterprise | ~12 days | Month 3 |
-| P4: Integrations | ~20 days | Month 4 |
-| P5: Polish | ~20 days | Month 5+ |
-
-**Total: ~77 days (~3.5 months) to production-ready**
-
-> **Note:** Using Supabase instead of raw PostgreSQL saves ~4 days by eliminating:
-> - Building JWT authentication from scratch
-> - Implementing email/password reset flows
-> - Setting up OAuth integrations
-> - Building row-level security policies
->
-> Supabase provides: PostgreSQL DB + Auth + Realtime subscriptions + Auto-generated APIs + Edge Functions
-
----
-
-## Recommendations
-
-### Start Here (Week 1)
-1. Dockerize the application
-2. Add health endpoints
-3. Add basic authentication
-
-### Then This (Month 1)
-1. Add Supabase (PostgreSQL + Auth + Realtime)
-2. Set up Supabase Auth
-3. Add structured logging
-
-### Then Scale (Month 2+)
-1. Web dashboard
-2. Task scheduling
-3. IoT integrations

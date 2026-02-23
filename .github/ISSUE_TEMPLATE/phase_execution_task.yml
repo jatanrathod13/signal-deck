@@ -1,0 +1,89 @@
+name: Phase Execution Task
+description: Track implementation work mapped to roadmap phases.
+title: "[Task] "
+labels:
+  - type:task
+  - status:triage
+  - phase-unassigned
+body:
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Roadmap Phase
+      description: Add the matching `phase-*` label after issue creation.
+      options:
+        - phase-1
+        - phase-2
+        - phase-3
+        - phase-4
+        - phase-5
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:P0
+        - priority:P1
+        - priority:P2
+        - priority:P3
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:runtime
+        - area:orchestrator
+        - area:execution
+        - area:data-plane
+        - area:governance
+        - area:reliability
+        - area:ui
+        - area:dx
+        - area:docs
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Task Objective
+      description: One paragraph objective for this task.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      placeholder: |
+        In scope:
+        - ...
+        Out of scope:
+        - ...
+    validations:
+      required: true
+  - type: textarea
+    id: implementation_notes
+    attributes:
+      label: Implementation Notes
+      description: Key files/services/routes expected to change.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation Plan
+      description: Build/tests/manual checks required before merge.
+    validations:
+      required: true
+

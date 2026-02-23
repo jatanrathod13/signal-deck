@@ -1,0 +1,102 @@
+- name: phase-1
+  color: 1d76db
+  description: Phase 1 roadmap work (objective-to-outcome reliability)
+- name: phase-2
+  color: 0e8a16
+  description: Phase 2 roadmap work (trust and human control)
+- name: phase-3
+  color: fbca04
+  description: Phase 3 roadmap work (production data plane hardening)
+- name: phase-4
+  color: d4c5f9
+  description: Phase 4 roadmap work (open-source extensibility)
+- name: phase-5
+  color: 5319e7
+  description: Phase 5 roadmap work (scale and operations)
+- name: phase-unassigned
+  color: bfdadc
+  description: Phase not yet triaged
+
+- name: type:bug
+  color: d73a4a
+  description: Something is broken
+- name: type:feature
+  color: a2eeef
+  description: New feature request
+- name: type:task
+  color: c2e0c6
+  description: Implementation task
+- name: type:docs
+  color: 0075ca
+  description: Documentation work
+- name: type:benchmark
+  color: f9d0c4
+  description: Benchmark objective definition or execution
+
+- name: status:triage
+  color: fef2c0
+  description: Needs triage
+- name: status:ready
+  color: c5def5
+  description: Ready for implementation
+- name: status:in-progress
+  color: 0e8a16
+  description: Actively being worked
+- name: status:blocked
+  color: b60205
+  description: Blocked by dependency/decision
+- name: status:needs-feedback
+  color: ffa500
+  description: Requires maintainer/community feedback
+- name: status:done
+  color: 5319e7
+  description: Implemented and validated
+
+- name: priority:P0
+  color: b60205
+  description: Critical and urgent
+- name: priority:P1
+  color: d93f0b
+  description: High priority
+- name: priority:P2
+  color: fbca04
+  description: Medium priority
+- name: priority:P3
+  color: c2e0c6
+  description: Low priority
+
+- name: area:runtime
+  color: 0366d6
+  description: Core runtime and task lifecycle
+- name: area:orchestrator
+  color: 0052cc
+  description: Plan/orchestration services and APIs
+- name: area:execution
+  color: 1d76db
+  description: Execution service, model routing, tool runtime
+- name: area:data-plane
+  color: 0e8a16
+  description: Persistence, Supabase, storage, tenancy
+- name: area:governance
+  color: 5319e7
+  description: Approvals, policy, audit, compliance
+- name: area:reliability
+  color: d93f0b
+  description: Rate limits, circuit breakers, DLQ, readiness
+- name: area:ui
+  color: c2e0c6
+  description: Client UX, observability surfaces, workflows
+- name: area:dx
+  color: 7057ff
+  description: SDK, CLI, contributor/developer experience
+- name: area:docs
+  color: 0075ca
+  description: Documentation and guides
+
+- name: good-first-issue
+  color: 7057ff
+  description: Good first contribution
+- name: help-wanted
+  color: 008672
+  description: Community contributions encouraged
+

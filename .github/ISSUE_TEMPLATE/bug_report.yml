@@ -1,0 +1,86 @@
+name: Bug Report
+description: Report a product/runtime bug affecting Signal Deck behavior.
+title: "[Bug] "
+labels:
+  - type:bug
+  - status:triage
+  - phase-unassigned
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please include concrete reproduction details.
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Affected Roadmap Phase
+      options:
+        - phase-1
+        - phase-2
+        - phase-3
+        - phase-4
+        - phase-5
+        - phase-unassigned
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:runtime
+        - area:orchestrator
+        - area:execution
+        - area:data-plane
+        - area:governance
+        - area:reliability
+        - area:ui
+        - area:dx
+        - area:docs
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: One-paragraph summary of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction Steps
+      placeholder: |
+        1. Go to ...
+        2. Create ...
+        3. Submit objective ...
+        4. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Include relevant API errors, stack traces, or event snippets.
+      render: shell
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 14, Node 20, Redis local, feature flags enabled...
+    validations:
+      required: true
+

@@ -1,0 +1,55 @@
+name: Benchmark Objective
+description: Add a public benchmark objective to measure run quality and reliability.
+title: "[Benchmark] "
+labels:
+  - type:benchmark
+  - status:triage
+  - phase-1
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Benchmark objectives should be reproducible and tied to measurable outcomes.
+  - type: input
+    id: objective_name
+    attributes:
+      label: Benchmark Name
+      placeholder: "Objective 01 - Deterministic Planning Path"
+    validations:
+      required: true
+  - type: textarea
+    id: objective_prompt
+    attributes:
+      label: Objective Prompt
+      description: Exact objective text to submit in Workspace/API.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_outcome
+    attributes:
+      label: Expected Outcome
+      description: Expected final result and artifacts.
+    validations:
+      required: true
+  - type: textarea
+    id: scoring
+    attributes:
+      label: Scoring Criteria
+      placeholder: |
+        - Completion status
+        - Plan quality
+        - Timeline completeness
+        - Failure explainability
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Thresholds
+      placeholder: |
+        - [ ] Completion success rate >= X%
+        - [ ] Median runtime <= Y seconds
+        - [ ] All failures have actionable error reasons
+    validations:
+      required: true
+

@@ -1,0 +1,77 @@
+name: Feature Request
+description: Propose a new capability aligned to Signal Deck's roadmap direction.
+title: "[Feature] "
+labels:
+  - type:feature
+  - status:triage
+  - phase-unassigned
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please align this request to the north-star workflow:
+        objective -> deterministic plan -> governed execution -> verifiable outcome.
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Target Roadmap Phase
+      options:
+        - phase-1
+        - phase-2
+        - phase-3
+        - phase-4
+        - phase-5
+        - phase-unassigned
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:runtime
+        - area:orchestrator
+        - area:execution
+        - area:data-plane
+        - area:governance
+        - area:reliability
+        - area:ui
+        - area:dx
+        - area:docs
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user/operator pain does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the behavior, APIs, and UX impact.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: What this request should not include.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks / Tradeoffs
+      description: Operational, data, reliability, or governance concerns.
+

@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Docs Index
+    url: https://github.com/jatanrathod13/agent-orchestrator-core/blob/main/docs/README.md
+    about: Start here for architecture, product direction, and operational docs.
+  - name: Product Roadmap
+    url: https://github.com/jatanrathod13/agent-orchestrator-core/blob/main/ROADMAP.md
+    about: Check roadmap phase alignment before opening major feature requests.
+
