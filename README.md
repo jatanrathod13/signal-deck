@@ -128,3 +128,9 @@ Docs index: `docs/README.md`
 ## Contributing
 
 See `CONTRIBUTING.md` for setup, standards, and contribution flow.
+
+## Project policies
+
+- `LICENSE`
+- `SECURITY.md`
+- `CODE_OF_CONDUCT.md`

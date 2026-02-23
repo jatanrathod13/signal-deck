@@ -52,7 +52,7 @@ cd client && npm run lint
 
 ## Code standards
 
-Follow repository guidance in `AGENTS.md`, including:
+Follow repository coding standards, including:
 
 1. TypeScript strictness and naming conventions
 2. Route/service patterns
