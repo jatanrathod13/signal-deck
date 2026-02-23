@@ -10,7 +10,7 @@ import { OrchestrationExecutionStrategy, RunArtifacts, Task, TaskErrorType, Task
 import { enqueueTaskById, getAllTasks, getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
-import { createAndStartDagPlan, createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
+import { createAndStartDagPlan, createAndStartPlan, getPlanById, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
 import { incrementMetric } from '../src/services/metricsService';
 import { addConversationMessage, appendRunEvent, getRun, updateRun } from '../src/services/conversationService';
 import { enqueueWebhookNotification } from '../src/services/webhookService';
@@ -188,6 +188,14 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
       ? await runOrchestrationTask(currentTask)
       : await executeAgentTask(currentTask);
 
+    const orchestrationPlanId = (
+      resultData &&
+      typeof resultData === 'object' &&
+      typeof (resultData as { planId?: unknown }).planId === 'string'
+    )
+      ? (resultData as { planId: string }).planId
+      : undefined;
+
     const completedTask = updateTaskStatus(taskId, 'completed', {
       result: resultData
     });
@@ -250,7 +258,7 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
           });
         }
 
-        if (!completedTask.parentTaskId && !completedTask.planId) {
+        if (!completedTask.parentTaskId && !completedTask.planId && !orchestrationPlanId) {
           const resultMetadata = (
             completedTask.result &&
             typeof completedTask.result === 'object' &&
@@ -296,6 +304,48 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
               taskId: completedTask.id
             }
           });
+        } else if (completedTask.planId) {
+          const plan = getPlanById(completedTask.planId);
+          if (plan?.status === 'completed') {
+            updateRun(completedTask.runId, 'completed', {
+              summary: `Plan ${plan.id} completed for objective: ${plan.objective}`,
+              metadata: {
+                ...(getRun(completedTask.runId)?.metadata ?? {}),
+                planId: plan.id,
+                executionStrategy: plan.metadata?.executionStrategy
+              }
+            });
+
+            appendRunEvent({
+              runId: completedTask.runId,
+              conversationId: completedTask.conversationId,
+              type: 'run.completed',
+              payload: {
+                taskId: completedTask.id,
+                planId: plan.id
+              }
+            });
+          } else if (plan?.status === 'failed') {
+            updateRun(completedTask.runId, 'failed', {
+              error: `Plan ${plan.id} failed`,
+              metadata: {
+                ...(getRun(completedTask.runId)?.metadata ?? {}),
+                planId: plan.id,
+                executionStrategy: plan.metadata?.executionStrategy
+              }
+            });
+
+            appendRunEvent({
+              runId: completedTask.runId,
+              conversationId: completedTask.conversationId,
+              type: 'run.failed',
+              payload: {
+                taskId: completedTask.id,
+                planId: plan.id,
+                error: `Plan ${plan.id} failed`
+              }
+            });
+          }
         }
       }
     }
