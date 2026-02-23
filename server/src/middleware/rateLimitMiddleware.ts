@@ -11,6 +11,7 @@ interface WindowCounter {
 }
 
 const counters = new Map<string, WindowCounter>();
+let nextCleanupAt = 0;
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -34,14 +35,52 @@ function getMaxRequests(): number {
 }
 
 function getRateLimitScope(req: Request): string {
-  const workspaceIdHeader = req.header('x-workspace-id');
-  const workspaceId = req.auth?.workspaceId ?? (typeof workspaceIdHeader === 'string' ? workspaceIdHeader : undefined);
+  const workspaceId = req.auth?.workspaceId;
 
   if (workspaceId) {
     return `workspace:${workspaceId}`;
   }
 
   return `ip:${req.ip || 'unknown'}`;
+}
+
+function getMaxTrackedScopes(): number {
+  return parsePositiveInt(process.env.HTTP_RATE_LIMIT_MAX_TRACKED_SCOPES, 10_000);
+}
+
+function maybeCleanupExpiredCounters(now: number): void {
+  if (now < nextCleanupAt) {
+    return;
+  }
+
+  for (const [scope, counter] of counters.entries()) {
+    if (now >= counter.resetAt) {
+      counters.delete(scope);
+    }
+  }
+
+  nextCleanupAt = now + 5_000;
+}
+
+function evictOneCounterIfNeeded(): void {
+  const maxTrackedScopes = getMaxTrackedScopes();
+  if (counters.size < maxTrackedScopes) {
+    return;
+  }
+
+  let oldestScope: string | null = null;
+  let oldestResetAt = Number.POSITIVE_INFINITY;
+
+  for (const [scope, counter] of counters.entries()) {
+    if (counter.resetAt < oldestResetAt) {
+      oldestResetAt = counter.resetAt;
+      oldestScope = scope;
+    }
+  }
+
+  if (oldestScope) {
+    counters.delete(oldestScope);
+  }
 }
 
 function isRateLimitEnabled(): boolean {
@@ -55,6 +94,7 @@ export function httpRateLimitMiddleware(req: Request, res: Response, next: NextF
   }
 
   const now = Date.now();
+  maybeCleanupExpiredCounters(now);
   const windowMs = getWindowMs();
   const maxRequests = getMaxRequests();
   const scope = getRateLimitScope(req);
@@ -62,6 +102,7 @@ export function httpRateLimitMiddleware(req: Request, res: Response, next: NextF
   const current = counters.get(scope);
 
   if (!current || now >= current.resetAt) {
+    evictOneCounterIfNeeded();
     counters.set(scope, {
       count: 1,
       resetAt: now + windowMs
@@ -100,4 +141,5 @@ export function httpRateLimitMiddleware(req: Request, res: Response, next: NextF
 
 export function resetRateLimitState(): void {
   counters.clear();
+  nextCleanupAt = 0;
 }

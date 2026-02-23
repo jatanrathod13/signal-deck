@@ -49,7 +49,10 @@ router.post('/inbound/:eventName', async (req: Request<{ eventName: string }>, r
     const result = await triggerInboundWebhook(
       req.params.eventName,
       req.body as Record<string, unknown>,
-      req.header('x-webhook-signature') ?? undefined
+      req.header('x-webhook-signature') ?? undefined,
+      {
+        authenticatedWorkspaceId: req.auth?.workspaceId
+      }
     );
 
     return res.status(202).json({
