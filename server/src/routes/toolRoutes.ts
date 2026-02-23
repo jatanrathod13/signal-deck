@@ -26,7 +26,7 @@ router.get('/catalog', async (req: Request<{}, {}, {}, { agentId?: string }>, re
           ? undefined
           : `Tool ${tool.name} is denied by ${isProviderTool ? 'provider tool' : 'agent'} policy`,
         // Provider tools flag availability
-        providerToolsEnabled: flags.FEATURE_PROVIDER_TOOLS
+        providerToolsEnabled: flags.FEATURE_PROVIDER_TOOLS && flags.FEATURE_EXTERNAL_AI_PROVIDERS
       };
     });
 
@@ -37,7 +37,9 @@ router.get('/catalog', async (req: Request<{}, {}, {}, { agentId?: string }>, re
         tools: enhancedTools,
         featureFlags: {
           providerTools: flags.FEATURE_PROVIDER_TOOLS,
-          mcpSdkClient: flags.FEATURE_MCP_SDK_CLIENT
+          externalAiProviders: flags.FEATURE_EXTERNAL_AI_PROVIDERS,
+          mcpSdkClient: flags.FEATURE_MCP_SDK_CLIENT,
+          iotIntegrations: flags.FEATURE_IOT_INTEGRATIONS
         }
       }
     });

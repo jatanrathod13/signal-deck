@@ -30,6 +30,7 @@ import { initializeWebhookService, stopWebhookService } from './services/webhook
 import { startWorker, stopWorker } from '../worker/taskWorker';
 import { requestContextMiddleware } from './middleware/requestContextMiddleware';
 import { supabaseAuthMiddleware } from './middleware/authMiddleware';
+import { httpRateLimitMiddleware } from './middleware/rateLimitMiddleware';
 import { logger } from './lib/logger';
 import { getReadinessSnapshot } from './services/readinessService';
 
@@ -42,7 +43,7 @@ const app: Express = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(requestContextMiddleware);
-app.use('/api', supabaseAuthMiddleware);
+app.use('/api', httpRateLimitMiddleware, supabaseAuthMiddleware);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {

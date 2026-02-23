@@ -10,7 +10,8 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "dev": "ts-node src/index.ts",
-    "migrations:list": "node scripts/listMigrations.js"
+    "migrations:list": "node scripts/listMigrations.js",
+    "cli": "ts-node src/cli/orchestratorCli.ts"
   },
   "keywords": [
     "agent",

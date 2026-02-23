@@ -10,10 +10,11 @@ import { OrchestrationExecutionStrategy, RunArtifacts, Task, TaskErrorType, Task
 import { enqueueTaskById, getAllTasks, getTask, markTaskFailure, updateTaskStatus } from '../src/services/taskQueueService';
 import { emitTaskStatus, emitTaskCompleted, emitError } from '../src/services/socketService';
 import { executeAgentTask } from '../src/services/executionService';
-import { createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
+import { createAndStartDagPlan, createAndStartPlan, handleTaskCompletion, handleTaskFailure } from '../src/services/orchestratorService';
 import { incrementMetric } from '../src/services/metricsService';
 import { addConversationMessage, appendRunEvent, getRun, updateRun } from '../src/services/conversationService';
 import { enqueueWebhookNotification } from '../src/services/webhookService';
+import { enqueueDeadLetter, isDeadLetterQueueEnabled } from '../src/services/deadLetterQueueService';
 
 // Redis connection for BullMQ worker
 let redisConnection: Redis | null = null;
@@ -47,7 +48,7 @@ function normalizeExecutionMode(value: unknown): TaskExecutionMode | undefined {
 }
 
 function normalizeExecutionStrategy(value: unknown, fallback: OrchestrationExecutionStrategy): OrchestrationExecutionStrategy {
-  if (value === 'parallel' || value === 'sequential') {
+  if (value === 'parallel' || value === 'sequential' || value === 'dag') {
     return value;
   }
 
@@ -55,7 +56,7 @@ function normalizeExecutionStrategy(value: unknown, fallback: OrchestrationExecu
 }
 
 function isOrchestrationTask(taskType: string): boolean {
-  return taskType === 'orchestrate' || taskType === 'orchestrate-team';
+  return taskType === 'orchestrate' || taskType === 'orchestrate-team' || taskType === 'orchestrate-dag';
 }
 
 /**
@@ -312,6 +313,12 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
     if (failedTask) {
       emitTaskStatus(failedTask);
       incrementMetric('tasksFailed');
+      if (isDeadLetterQueueEnabled()) {
+        enqueueDeadLetter(failedTask, errorMessage, errorType, {
+          runId: failedTask.runId,
+          conversationId: failedTask.conversationId
+        });
+      }
       enqueueWebhookNotification('task.failed', {
         taskId: failedTask.id,
         agentId: failedTask.agentId,
@@ -352,10 +359,12 @@ async function processTaskJob(job: Job): Promise<{ result: string }> {
 interface OrchestrationTaskData {
   objective?: unknown;
   defaultAgentId?: unknown;
+  steps?: unknown;
   stepPrompts?: unknown;
   maxSteps?: unknown;
   teamAgentIds?: unknown;
   executionStrategy?: unknown;
+  assignmentStrategy?: unknown;
   executionMode?: unknown;
   metadata?: unknown;
 }
@@ -378,27 +387,45 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
   const stepPrompts = Array.isArray(taskData.stepPrompts)
     ? taskData.stepPrompts.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     : undefined;
+  const dagSteps = Array.isArray(taskData.steps)
+    ? taskData.steps.filter((value): value is {
+      id?: string;
+      title: string;
+      description?: string;
+      agentId?: string;
+      taskType?: string;
+      taskData?: Record<string, unknown>;
+      dependsOnStepIds?: string[];
+    } => (
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { title?: unknown }).title === 'string'
+    ))
+    : undefined;
   const teamAgentIds = Array.isArray(taskData.teamAgentIds)
     ? taskData.teamAgentIds.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     : undefined;
+  const assignmentStrategy: 'round_robin' | 'least_loaded' = taskData.assignmentStrategy === 'least_loaded'
+    ? 'least_loaded'
+    : 'round_robin';
 
   const maxSteps = typeof taskData.maxSteps === 'number' ? taskData.maxSteps : undefined;
   const executionStrategy = normalizeExecutionStrategy(
     taskData.executionStrategy,
-    task.type === 'orchestrate-team' ? 'parallel' : 'sequential'
+    task.type === 'orchestrate-dag'
+      ? 'dag'
+      : (task.type === 'orchestrate-team' ? 'parallel' : 'sequential')
   );
   const executionMode = normalizeExecutionMode(taskData.executionMode) ?? task.executionMode;
   const metadata = typeof taskData.metadata === 'object' && taskData.metadata !== null
     ? taskData.metadata as Record<string, unknown>
     : undefined;
 
-  const summary = await createAndStartPlan({
+  const commonInput = {
     objective,
     defaultAgentId,
-    stepPrompts,
-    maxSteps,
     teamAgentIds,
-    executionStrategy,
+    assignmentStrategy,
     executionMode,
     conversationId: task.conversationId,
     runId: task.runId,
@@ -407,12 +434,25 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
       parentTaskId: task.id,
       workspaceId: task.workspaceId
     }
-  });
+  };
+
+  const summary = executionStrategy === 'dag'
+    ? await createAndStartDagPlan({
+      ...commonInput,
+      steps: dagSteps ?? []
+    })
+    : await createAndStartPlan({
+      ...commonInput,
+      stepPrompts,
+      maxSteps,
+      executionStrategy
+    });
 
   return {
     mode: task.type,
     objective,
     executionStrategy,
+    assignmentStrategy,
     teamAgentIds: summary.teamAgentIds,
     ...summary
   };

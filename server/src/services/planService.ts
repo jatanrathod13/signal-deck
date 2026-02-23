@@ -104,6 +104,7 @@ export async function createPlan(input: {
   createdByTaskId?: string;
   metadata?: Record<string, unknown>;
   steps: Array<{
+    id?: string;
     title: string;
     description?: string;
     agentId: string;
@@ -120,8 +121,10 @@ export async function createPlan(input: {
     const stepInput = input.steps[index];
     const previousStep = steps[index - 1];
 
+    const stepId = stepInput.id ?? generateId('step');
+
     steps.push({
-      id: generateId('step'),
+      id: stepId,
       planId,
       title: stepInput.title,
       description: stepInput.description,

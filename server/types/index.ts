@@ -16,20 +16,34 @@ export interface FeatureFlags {
   FEATURE_DEEP_RESEARCH: boolean;
   FEATURE_MCP_SDK_CLIENT: boolean;
   FEATURE_PROVIDER_TOOLS: boolean;
+  FEATURE_IOT_INTEGRATIONS: boolean;
+  FEATURE_EXTERNAL_AI_PROVIDERS: boolean;
   FEATURE_EVALUATOR_LOOP: boolean;
   FEATURE_APPROVAL_GATES: boolean;
   FEATURE_RUN_INTELLIGENCE_UI: boolean;
   FEATURE_RESUMABLE_STREAM_TRANSPORT: boolean;
+  FEATURE_HTTP_RATE_LIMIT: boolean;
+  FEATURE_CIRCUIT_BREAKERS: boolean;
+  FEATURE_DEAD_LETTER_QUEUE: boolean;
+  FEATURE_ADVANCED_DAG: boolean;
+  FEATURE_DYNAMIC_AGENT_POOLS: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   FEATURE_DEEP_RESEARCH: false,
   FEATURE_MCP_SDK_CLIENT: false,
   FEATURE_PROVIDER_TOOLS: false,
+  FEATURE_IOT_INTEGRATIONS: false,
+  FEATURE_EXTERNAL_AI_PROVIDERS: false,
   FEATURE_EVALUATOR_LOOP: false,
   FEATURE_APPROVAL_GATES: false,
   FEATURE_RUN_INTELLIGENCE_UI: false,
   FEATURE_RESUMABLE_STREAM_TRANSPORT: false,
+  FEATURE_HTTP_RATE_LIMIT: false,
+  FEATURE_CIRCUIT_BREAKERS: false,
+  FEATURE_DEAD_LETTER_QUEUE: false,
+  FEATURE_ADVANCED_DAG: false,
+  FEATURE_DYNAMIC_AGENT_POOLS: false,
 };
 
 export function getFeatureFlags(): FeatureFlags {
@@ -37,10 +51,17 @@ export function getFeatureFlags(): FeatureFlags {
     FEATURE_DEEP_RESEARCH: process.env.FEATURE_DEEP_RESEARCH === 'true',
     FEATURE_MCP_SDK_CLIENT: process.env.FEATURE_MCP_SDK_CLIENT === 'true',
     FEATURE_PROVIDER_TOOLS: process.env.FEATURE_PROVIDER_TOOLS === 'true',
+    FEATURE_IOT_INTEGRATIONS: process.env.FEATURE_IOT_INTEGRATIONS === 'true',
+    FEATURE_EXTERNAL_AI_PROVIDERS: process.env.FEATURE_EXTERNAL_AI_PROVIDERS === 'true',
     FEATURE_EVALUATOR_LOOP: process.env.FEATURE_EVALUATOR_LOOP === 'true',
     FEATURE_APPROVAL_GATES: process.env.FEATURE_APPROVAL_GATES === 'true',
     FEATURE_RUN_INTELLIGENCE_UI: process.env.FEATURE_RUN_INTELLIGENCE_UI === 'true',
     FEATURE_RESUMABLE_STREAM_TRANSPORT: process.env.FEATURE_RESUMABLE_STREAM_TRANSPORT === 'true',
+    FEATURE_HTTP_RATE_LIMIT: process.env.FEATURE_HTTP_RATE_LIMIT === 'true',
+    FEATURE_CIRCUIT_BREAKERS: process.env.FEATURE_CIRCUIT_BREAKERS === 'true',
+    FEATURE_DEAD_LETTER_QUEUE: process.env.FEATURE_DEAD_LETTER_QUEUE === 'true',
+    FEATURE_ADVANCED_DAG: process.env.FEATURE_ADVANCED_DAG === 'true',
+    FEATURE_DYNAMIC_AGENT_POOLS: process.env.FEATURE_DYNAMIC_AGENT_POOLS === 'true',
   };
 }
 
@@ -121,7 +142,7 @@ export type TaskExecutionMode = 'tool_loop' | 'claude_cli';
 export type ScheduleRunStatus = 'never' | 'running' | 'succeeded' | 'failed';
 export type WebhookDirection = 'inbound' | 'outbound';
 export type WebhookStatus = 'pending' | 'delivered' | 'failed' | 'disabled';
-export type OrchestrationExecutionStrategy = 'sequential' | 'parallel';
+export type OrchestrationExecutionStrategy = 'sequential' | 'parallel' | 'dag';
 export type PlanStatus = 'draft' | 'active' | 'completed' | 'failed' | 'cancelled';
 export type PlanStepStatus = 'pending' | 'blocked' | 'running' | 'completed' | 'failed' | 'skipped';
 export type ConversationStatus = 'active' | 'archived';
@@ -444,6 +465,7 @@ export interface OrchestrationSummary {
   readySteps: number;
   executionStrategy?: OrchestrationExecutionStrategy;
   teamAgentIds?: string[];
+  assignmentStrategy?: 'round_robin' | 'least_loaded';
 }
 
 // Shared memory value interface

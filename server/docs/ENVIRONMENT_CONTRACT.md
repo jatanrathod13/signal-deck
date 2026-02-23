@@ -1,4 +1,4 @@
-# Environment Variable Contract (Phase 5)
+# Environment Variable Contract (Phase 6)
 
 ## Core Runtime
 - `PORT`: HTTP server port (default `3001`)
@@ -30,11 +30,33 @@
 - `LANGSMITH_TRACING`: Enables tracing (`true|false`)
 - `LANGSMITH_API_KEY`: Required when `LANGSMITH_TRACING=true`
 
+## Phase 6 Integrations
+- `FEATURE_MCP_SDK_CLIENT`: Enables MCP server tool loading (`true|false`)
+- `FEATURE_IOT_INTEGRATIONS`: Enables IoT integration templates in system catalog (`true|false`)
+- `FEATURE_PROVIDER_TOOLS`: Enables provider-native tool pathways (`true|false`)
+- `FEATURE_EXTERNAL_AI_PROVIDERS`: Enables non-default provider catalogs (Anthropic/Google/local) (`true|false`)
+
 ## Queue Settings
 - `TASK_JOB_ATTEMPTS`: BullMQ retries per job (default `1`)
 - `TASK_JOB_BACKOFF_DELAY_MS`: Exponential backoff seed delay (default `1000`)
 - `WORKER_CONCURRENCY`: Worker concurrency (default `10`)
 - `WORKER_RATE_LIMIT`: Worker per-second limiter max (default `10`)
+
+## Reliability Controls
+- `FEATURE_HTTP_RATE_LIMIT`: Enables per-workspace/IP API rate limiting (`true|false`)
+- `HTTP_RATE_LIMIT_WINDOW_MS`: Rate limiter rolling window in milliseconds (default `60000`)
+- `HTTP_RATE_LIMIT_MAX_REQUESTS`: Max API requests allowed in each window per scope (default `120`)
+- `FEATURE_CIRCUIT_BREAKERS`: Enables circuit breaker protection around unstable dependencies (`true|false`)
+- `CIRCUIT_BREAKER_FAILURE_THRESHOLD`: Failures before opening a circuit (default `3`)
+- `CIRCUIT_BREAKER_RESET_TIMEOUT_MS`: Open-state cool-down before half-open probe (default `30000`)
+- `CIRCUIT_BREAKER_HALF_OPEN_MAX_CALLS`: Max concurrent probe calls in half-open state (default `1`)
+- `CIRCUIT_BREAKER_OPERATION_TIMEOUT_MS`: Timeout applied to guarded operations (default `20000`)
+- `FEATURE_DEAD_LETTER_QUEUE`: Enables task dead-letter capture on worker failures (`true|false`)
+- `DLQ_MAX_ENTRIES`: Max in-memory dead-letter entries before oldest eviction (default `500`)
+
+## Advanced Orchestration
+- `FEATURE_ADVANCED_DAG`: Enables `POST /api/plans/dag` DAG workflow endpoint (`true|false`)
+- `FEATURE_DYNAMIC_AGENT_POOLS`: Enables load-aware `least_loaded` assignment strategy (`true|false`)
 
 ## Cache and Runtime Policy
 - `CACHE_DEFAULT_TTL_MS`: Default in-memory cache TTL in milliseconds (default `5000`)

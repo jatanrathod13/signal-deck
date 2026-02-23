@@ -9,6 +9,7 @@ import { getTaskQueueHealth } from './taskQueueService';
 import { getScheduleHealthSnapshot } from './scheduleService';
 import { getWebhookHealthSnapshot } from './webhookService';
 import { getCacheStats } from './cacheService';
+import { getDeadLetterSnapshot } from './deadLetterQueueService';
 
 export interface DependencyCheck {
   ok: boolean;
@@ -39,6 +40,11 @@ export interface ReadinessSnapshot {
       hits?: number;
       misses?: number;
       evictions?: number;
+    };
+    deadLetterQueue: DependencyCheck & {
+      pending?: number;
+      maxEntries?: number;
+      enabled?: boolean;
     };
   };
   timestamp: string;
@@ -99,10 +105,25 @@ export async function getReadinessSnapshot(): Promise<ReadinessSnapshot> {
         misses: snapshot.misses,
         evictions: snapshot.evictions
       };
+    })(),
+    deadLetterQueue: (() => {
+      const snapshot = getDeadLetterSnapshot();
+      const pressureThreshold = Math.floor(snapshot.maxEntries * 0.8);
+      const pending = snapshot.pending;
+      return {
+        ok: pending < pressureThreshold,
+        detail: snapshot.enabled
+          ? `enabled (${pending} pending)`
+          : 'disabled',
+        pending,
+        maxEntries: snapshot.maxEntries,
+        enabled: snapshot.enabled
+      };
     })()
   };
 
-  const status = checks.redis.ok && checks.database.ok && checks.queue.ok
+  const deadLetterHealthy = !checks.deadLetterQueue.enabled || checks.deadLetterQueue.ok;
+  const status = checks.redis.ok && checks.database.ok && checks.queue.ok && deadLetterHealthy
     ? 'ok'
     : 'degraded';
 

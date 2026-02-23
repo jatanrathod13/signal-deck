@@ -12,6 +12,7 @@ const updateStepStatusMock = jest.fn();
 const submitTaskMock = jest.fn();
 const getTaskMock = jest.fn();
 const linkChildTaskMock = jest.fn();
+const getAllTasksMock = jest.fn();
 
 jest.mock('../src/services/planService', () => ({
   createPlan: (...args: unknown[]) => createPlanMock(...args),
@@ -24,14 +25,18 @@ jest.mock('../src/services/planService', () => ({
 jest.mock('../src/services/taskQueueService', () => ({
   submitTask: (...args: unknown[]) => submitTaskMock(...args),
   getTask: (...args: unknown[]) => getTaskMock(...args),
-  linkChildTask: (...args: unknown[]) => linkChildTaskMock(...args)
+  linkChildTask: (...args: unknown[]) => linkChildTaskMock(...args),
+  getAllTasks: (...args: unknown[]) => getAllTasksMock(...args)
 }));
 
-import { createAndStartPlan, generateStepPromptsFromObjective } from '../src/services/orchestratorService';
+import { createAndStartDagPlan, createAndStartPlan, generateStepPromptsFromObjective } from '../src/services/orchestratorService';
 
 describe('OrchestratorService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    getAllTasksMock.mockReturnValue([]);
+    delete process.env.FEATURE_DYNAMIC_AGENT_POOLS;
+    delete process.env.FEATURE_ADVANCED_DAG;
   });
 
   it('generates multiple step prompts from a compound objective', () => {
@@ -117,5 +122,74 @@ describe('OrchestratorService', () => {
     expect(firstCreatePlanArg.steps.map((step) => step.agentId)).toEqual(['agent-1', 'agent-2', 'agent-1']);
     expect(firstCreatePlanArg.steps.every((step) => Array.isArray(step.dependsOnStepIds) && step.dependsOnStepIds.length === 0))
       .toBe(true);
+  });
+
+  it('supports load-aware assignment when dynamic pools feature flag is enabled', async () => {
+    process.env.FEATURE_DYNAMIC_AGENT_POOLS = 'true';
+    getAllTasksMock.mockReturnValue([
+      { agentId: 'agent-1', status: 'processing' },
+      { agentId: 'agent-1', status: 'pending' }
+    ]);
+
+    createPlanMock.mockResolvedValue({
+      id: 'plan-load-aware',
+      steps: [{ id: 'step-1' }, { id: 'step-2' }]
+    });
+    getReadyStepsMock.mockReturnValue([]);
+
+    await createAndStartPlan({
+      objective: 'Distribute work',
+      defaultAgentId: 'agent-1',
+      teamAgentIds: ['agent-1', 'agent-2'],
+      stepPrompts: ['Step A', 'Step B'],
+      assignmentStrategy: 'least_loaded'
+    });
+
+    const firstCreatePlanArg = createPlanMock.mock.calls[0][0] as {
+      steps: Array<{ agentId: string }>;
+    };
+
+    expect(firstCreatePlanArg.steps.map((step) => step.agentId)).toEqual(['agent-2', 'agent-2']);
+  });
+
+  it('creates DAG plans with explicit dependencies', async () => {
+    process.env.FEATURE_ADVANCED_DAG = 'true';
+
+    createPlanMock.mockResolvedValue({
+      id: 'plan-dag-1',
+      steps: [{ id: 'ingest' }, { id: 'analyze' }, { id: 'publish' }]
+    });
+    getReadyStepsMock.mockReturnValue([{ id: 'ingest', agentId: 'agent-1', taskType: 'orchestration-step', taskData: {} }]);
+    submitTaskMock.mockResolvedValue('task-ingest');
+
+    const summary = await createAndStartDagPlan({
+      objective: 'Ship DAG flow',
+      defaultAgentId: 'agent-1',
+      steps: [
+        { id: 'ingest', title: 'Ingest data' },
+        { id: 'analyze', title: 'Analyze data', dependsOnStepIds: ['ingest'] },
+        { id: 'publish', title: 'Publish report', dependsOnStepIds: ['analyze'] }
+      ]
+    });
+
+    expect(summary.executionStrategy).toBe('dag');
+    expect(createPlanMock).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        executionStrategy: 'dag'
+      })
+    }));
+  });
+
+  it('rejects cyclic DAG plans', async () => {
+    process.env.FEATURE_ADVANCED_DAG = 'true';
+
+    await expect(createAndStartDagPlan({
+      objective: 'Cycle',
+      defaultAgentId: 'agent-1',
+      steps: [
+        { id: 'a', title: 'A', dependsOnStepIds: ['b'] },
+        { id: 'b', title: 'B', dependsOnStepIds: ['a'] }
+      ]
+    })).rejects.toThrow('cycle');
   });
 });

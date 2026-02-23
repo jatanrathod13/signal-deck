@@ -102,6 +102,11 @@ function createModelProvider() {
 const openai = createModelProvider();
 
 async function loadMcpTools(config: Record<string, unknown>): Promise<Record<string, any>> {
+  const flags = getFeatureFlags();
+  if (!flags.FEATURE_MCP_SDK_CLIENT) {
+    return {};
+  }
+
   const mcpServers = Array.isArray(config.mcpServers)
     ? config.mcpServers.filter((server): server is { url: string } => {
       if (!server || typeof server !== 'object') {
@@ -241,10 +246,14 @@ export async function getToolCatalog(agentId?: string): Promise<{
 
   const flags = getFeatureFlags();
   const providerConfig = (config.providerTools ?? {}) as Record<string, unknown>;
-  const providerEnabled = flags.FEATURE_PROVIDER_TOOLS && providerConfig.enabled === true;
+  const providerEnabled = (
+    flags.FEATURE_PROVIDER_TOOLS &&
+    flags.FEATURE_EXTERNAL_AI_PROVIDERS &&
+    providerConfig.enabled === true
+  );
   const allowedProviders = Array.isArray(providerConfig.allowedProviders)
     ? providerConfig.allowedProviders.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-    : ['openai'];
+    : ['openai', 'anthropic', 'google', 'ollama'];
   const deniedProviders = new Set(
     Array.isArray(providerConfig.deniedProviders)
       ? providerConfig.deniedProviders.filter((value): value is string => typeof value === 'string')

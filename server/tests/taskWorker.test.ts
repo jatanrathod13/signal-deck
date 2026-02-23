@@ -38,6 +38,7 @@ jest.mock('../src/services/executionService', () => ({
 
 jest.mock('../src/services/orchestratorService', () => ({
   createAndStartPlan: jest.fn(),
+  createAndStartDagPlan: jest.fn(),
   handleTaskCompletion: jest.fn().mockResolvedValue(undefined),
   handleTaskFailure: jest.fn().mockResolvedValue(undefined)
 }));
