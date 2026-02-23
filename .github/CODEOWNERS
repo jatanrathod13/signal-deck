@@ -1,0 +1,8 @@
+# Require repository owner review by default.
+* @jatanrathod13
+
+# Optional explicit ownership for core runtime paths.
+/server/ @jatanrathod13
+/client/ @jatanrathod13
+/docs/ @jatanrathod13
+

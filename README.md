@@ -128,6 +128,7 @@ Docs index: `docs/README.md`
 ## Contributing
 
 See `CONTRIBUTING.md` for setup, standards, and contribution flow.
+All code changes must go through Pull Requests; direct pushes to `main` are blocked by branch protection.
 
 ## Project policies
 

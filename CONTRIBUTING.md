@@ -40,15 +40,31 @@ cd client && npm run lint
 
 ## Branching and pull requests
 
-1. Create a focused branch from `main`.
-2. Keep scope small and tied to one outcome.
-3. Include tests for behavior changes.
-4. Update docs when API or workflow behavior changes.
-5. In PR description include:
+`main` is protected. Direct pushes/commits to `main` are not allowed.
+
+1. Create a focused branch from `main` (recommend prefix `codex/` or `feature/`).
+2. Open a Pull Request to `main`.
+3. Keep scope small and tied to one outcome.
+4. Include tests for behavior changes.
+5. Update docs when API or workflow behavior changes.
+6. In PR description include:
    - Problem
    - Approach
    - Validation
    - Risks / rollback notes
+7. Wait for required review approval before merge.
+
+## Protected main workflow
+
+The repository enforces:
+
+1. Pull request required for `main`
+2. At least 1 approving review
+3. Last push must be approved
+4. Conversation resolution required
+5. No force push or branch deletion on `main`
+
+If you have admin access, do not bypass protections except for urgent incident recovery.
 
 ## Code standards
 
