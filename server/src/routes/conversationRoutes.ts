@@ -34,6 +34,11 @@ const createMessageSchema = z.object({
   content: z.string().min(1),
   agentId: z.string().min(1).optional(),
   taskType: z.string().min(1).optional(),
+  executionStrategy: z.enum(['sequential', 'parallel', 'dag']).optional(),
+  maxSteps: z.number().int().min(2).max(10).optional(),
+  teamAgentIds: z.array(z.string().min(1)).optional(),
+  assignmentStrategy: z.enum(['round_robin', 'least_loaded']).optional(),
+  stepPrompts: z.array(z.string().min(1)).optional(),
   // New: execution profile support
   executionProfile: z.enum(['standard', 'deep_research']).optional(),
   // New: research configuration
@@ -203,13 +208,25 @@ router.post('/:conversationId/messages', async (req: Request<{ conversationId: s
     });
 
     const now = new Date();
+    const normalizedTaskType = parsed.data.taskType?.trim();
+    const taskType = normalizedTaskType && normalizedTaskType.length > 0
+      ? normalizedTaskType
+      : 'orchestrate';
+
     const task: Task = {
       id: '',
       workspaceId,
       agentId: defaultAgentId,
-      type: parsed.data.taskType || 'conversation-message',
+      type: taskType,
       data: {
         prompt: parsed.data.content,
+        objective: parsed.data.content,
+        defaultAgentId: defaultAgentId,
+        executionStrategy: parsed.data.executionStrategy ?? 'sequential',
+        maxSteps: parsed.data.maxSteps,
+        teamAgentIds: parsed.data.teamAgentIds,
+        assignmentStrategy: parsed.data.assignmentStrategy,
+        stepPrompts: parsed.data.stepPrompts,
         conversationId: conversation.id,
         runId: run.id,
         // Pass execution profile and research config through task data

@@ -449,6 +449,7 @@ async function runOrchestrationTask(task: Task): Promise<Record<string, unknown>
     });
 
   return {
+    message: `Started ${executionStrategy} orchestration plan ${summary.planId} with ${summary.totalSteps} steps for objective: ${objective}`,
     mode: task.type,
     objective,
     executionStrategy,
